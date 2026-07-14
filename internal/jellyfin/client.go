@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -73,4 +74,34 @@ func (c *Client) FetchLatest(ctx context.Context, limit int) ([]Item, error) {
 		items[i] = Item{ID: r.ID, Name: r.Name, HasImage: r.ImageTags.Primary != ""}
 	}
 	return items, nil
+}
+
+type ImageResult struct {
+	Body        io.ReadCloser
+	ContentType string
+	StatusCode  int
+}
+
+// FetchImage streams a poster image from Jellyfin. The caller owns Body and
+// must close it. A non-200 StatusCode is not treated as an error — the
+// caller (main.go's imageHandler) decides how to respond (e.g. a 404 for a
+// missing poster).
+func (c *Client) FetchImage(ctx context.Context, itemID string) (*ImageResult, error) {
+	u := fmt.Sprintf("%s/Items/%s/Images/Primary", c.BaseURL, itemID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("X-Emby-Token", c.Token)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request image: %w", err)
+	}
+
+	return &ImageResult{
+		Body:        resp.Body,
+		ContentType: resp.Header.Get("Content-Type"),
+		StatusCode:  resp.StatusCode,
+	}, nil
 }

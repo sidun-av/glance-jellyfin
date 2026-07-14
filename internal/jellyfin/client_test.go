@@ -3,6 +3,7 @@ package jellyfin
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -94,5 +95,60 @@ func TestFetchLatest_MalformedResponse(t *testing.T) {
 	_, err := client.FetchLatest(context.Background(), 12)
 	if err == nil {
 		t.Fatal("expected error for malformed response, got nil")
+	}
+}
+
+func TestFetchImage_StreamsBodyAndContentType(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/Items/abc123/Images/Primary" {
+			t.Errorf("path = %s, want /Items/abc123/Images/Primary", r.URL.Path)
+		}
+		if got := r.Header.Get("X-Emby-Token"); got != "test-token" {
+			t.Errorf("X-Emby-Token = %q, want %q", got, "test-token")
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write([]byte("fake-jpeg-bytes"))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-token", "test-user")
+	result, err := client.FetchImage(context.Background(), "abc123")
+	if err != nil {
+		t.Fatalf("FetchImage: %v", err)
+	}
+	defer result.Body.Close()
+
+	if result.StatusCode != http.StatusOK {
+		t.Errorf("StatusCode = %d, want 200", result.StatusCode)
+	}
+	if result.ContentType != "image/jpeg" {
+		t.Errorf("ContentType = %q, want image/jpeg", result.ContentType)
+	}
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if string(body) != "fake-jpeg-bytes" {
+		t.Errorf("body = %q, want %q", body, "fake-jpeg-bytes")
+	}
+}
+
+func TestFetchImage_NonOKStatusReturnsStatusCodeNotError(t *testing.T) {
+	// A 404 from Jellyfin (missing poster) is not a Go error — the caller
+	// (main.go's imageHandler) decides what to do with a non-200
+	// StatusCode.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-token", "test-user")
+	result, err := client.FetchImage(context.Background(), "missing")
+	if err != nil {
+		t.Fatalf("FetchImage: %v", err)
+	}
+	defer result.Body.Close()
+	if result.StatusCode != http.StatusNotFound {
+		t.Errorf("StatusCode = %d, want 404", result.StatusCode)
 	}
 }
