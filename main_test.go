@@ -136,6 +136,51 @@ func TestImageHandler_MissingImageReturns404(t *testing.T) {
 	}
 }
 
+func TestImageHandler_RejectsPathTraversalItemID(t *testing.T) {
+	// A hit-counting server, not fakeJellyfinServer: fakeJellyfinServer's
+	// default case already returns 404 for unrecognized paths, which would
+	// make a test that only asserts rec.Code == 404 pass whether or not the
+	// itemID validation exists (confirmed: without the fix, the traversal
+	// path is spliced unescaped into the outbound URL and reaches this
+	// server unnormalized as "/Items/../secret/Images/Primary", which the
+	// fake server's default case would 404 anyway). Counting hits here
+	// proves the request never left main.go at all.
+	var hitCount int
+	jf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hitCount++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer jf.Close()
+
+	cfg := testConfig(jf.URL)
+	mux := newMux(cfg, newApp(cfg))
+
+	// %2e%2e%2Fsecret is the escaped form of "../secret". net/http.ServeMux
+	// (Go 1.22+) routes on the escaped path, so this still matches "/image/",
+	// but the handler reads r.URL.Path, which net/url decodes to
+	// "/image/../secret" — confirmed directly below: httptest.NewRequest
+	// parses the target the same way a real incoming request would, and
+	// req.URL.Path for this target is "/image/../secret" while
+	// req.URL.EscapedPath() remains "/image/%2e%2e%2Fsecret". Without the
+	// itemID allow-list, TrimPrefix would yield itemID == "../secret",
+	// which FetchImage splices unescaped into the outbound Jellyfin request
+	// URL.
+	req := httptest.NewRequest(http.MethodGet, "/image/%2e%2e%2Fsecret", nil)
+	if req.URL.Path != "/image/../secret" {
+		t.Fatalf("test setup invalid: req.URL.Path = %q, want %q (this test doesn't exercise the decoded-path scenario it's meant to)", req.URL.Path, "/image/../secret")
+	}
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (path-traversal-shaped itemID must be rejected)", rec.Code)
+	}
+	if hitCount != 0 {
+		t.Fatalf("fake Jellyfin server was hit %d time(s), want 0 (itemID must be rejected before any outbound request is made)", hitCount)
+	}
+}
+
 func TestHealthzHandler(t *testing.T) {
 	cfg := testConfig("http://unused")
 	mux := newMux(cfg, newApp(cfg))

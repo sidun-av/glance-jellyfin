@@ -7,12 +7,19 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/sidun-av/glance-jellyfin/internal/jellyfin"
 	"github.com/sidun-av/glance-jellyfin/internal/render"
 )
+
+// validItemID matches Jellyfin item IDs, which are hex-GUID-shaped (hex
+// digits, optionally hyphenated). Anything else is rejected before it can
+// reach the outbound Jellyfin request URL in client.FetchImage, which
+// splices itemID into that URL unescaped.
+var validItemID = regexp.MustCompile(`^[0-9a-fA-F-]+$`)
 
 type app struct {
 	cfg    *Config
@@ -57,7 +64,11 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) imageHandler(w http.ResponseWriter, r *http.Request) {
 	itemID := strings.TrimPrefix(r.URL.Path, "/image/")
-	if itemID == "" {
+	if !validItemID.MatchString(itemID) {
+		// Empty itemID and path-traversal/otherwise-malformed itemIDs are
+		// both rejected here, with the same 404 as a genuinely missing
+		// image, so this check isn't an oracle for probing valid vs.
+		// invalid IDs.
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
