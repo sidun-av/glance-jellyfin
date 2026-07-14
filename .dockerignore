@@ -1,0 +1,5 @@
+.git
+docs
+.github
+*_test.go
+glance-jellyfin
