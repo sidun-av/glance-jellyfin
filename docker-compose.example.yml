@@ -1,0 +1,22 @@
+services:
+  glance-jellyfin:
+    image: ghcr.io/sidun-av/glance-jellyfin:latest
+    restart: unless-stopped
+    environment:
+      # Required — your Jellyfin instance, an API key, a user ID, and
+      # Jellyfin's browser-facing URL for click-through links.
+      - JELLYFIN_URL=${JELLYFIN_URL}
+      - JELLYFIN_TOKEN=${JELLYFIN_TOKEN}
+      - JELLYFIN_USER_ID=${JELLYFIN_USER_ID}
+      - JELLYFIN_PUBLIC_URL=${JELLYFIN_PUBLIC_URL}
+      # Optional — every one of these has a built-in default; only set the
+      # ones you want to change. If you're deploying via a GUI stack manager
+      # (e.g. Komodo, pointed at this repo), set these in its "Environment"
+      # tab and you never need to touch a config file at all.
+      - TITLE=${TITLE:-}
+      - LIMIT=${LIMIT:-}
+    # Optional: mount a hand-edited config.yml instead of (or alongside) the
+    # environment variables above — see config.example.yml. Not needed for a
+    # GUI/env-var-only setup; env vars always take priority over this file.
+    # volumes:
+    #   - ./glance-jellyfin/config.yml:/config.yml:ro

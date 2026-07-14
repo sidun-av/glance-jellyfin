@@ -1,0 +1,16 @@
+# Every field below can also be set via an environment variable, which
+# always takes priority over whatever's written here — see README.md's
+# "Environment variable reference" for the full list (e.g. JELLYFIN_URL,
+# JELLYFIN_TOKEN, ...). That's the intended way to configure this image from
+# a GUI stack manager like Komodo, with no file to mount or edit at all.
+# This file is for hand-editing a mounted config.yml instead.
+
+jellyfin:
+  url: http://jellyfin:8096   # env: JELLYFIN_URL
+  token: replace-with-an-api-key   # env: JELLYFIN_TOKEN
+  user_id: replace-with-a-jellyfin-user-id   # env: JELLYFIN_USER_ID
+  public_url: https://jellyfin.example.com   # env: JELLYFIN_PUBLIC_URL — browser-facing base URL, used for each card's click-through link
+
+title: Library   # env: TITLE
+
+limit: 12   # env: LIMIT — number of most-recently-added items to show

@@ -1,0 +1,10 @@
+# Baked into the Docker image as /config.yml. Every setting here can be
+# overridden by an environment variable instead (see README.md's
+# "Environment variable reference") — that's the intended way to configure
+# this image from a GUI stack manager like Komodo, with no file to mount or
+# edit at all. Only jellyfin.url/token/user_id/public_url are required, via
+# JELLYFIN_URL/JELLYFIN_TOKEN/JELLYFIN_USER_ID/JELLYFIN_PUBLIC_URL.
+#
+# If you'd rather hand-edit a mounted config.yml instead, start from
+# config.example.yml, which has the same fields with example values and
+# comments.
