@@ -105,3 +105,35 @@ func (c *Client) FetchImage(ctx context.Context, itemID string) (*ImageResult, e
 		StatusCode:  resp.StatusCode,
 	}, nil
 }
+
+// FetchServerID retrieves Jellyfin's own server ID via its unauthenticated
+// public info endpoint, used to build a direct playback deep link
+// (web/#/video?id=...&serverId=...). The caller (main.go's
+// app.fetchServerIDCached) fetches this once and caches it for the process
+// lifetime, since a running server's ID cannot change without a restart.
+func (c *Client) FetchServerID(ctx context.Context) (string, error) {
+	u := fmt.Sprintf("%s/System/Info/Public", c.BaseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request server info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("server info returned status %d", resp.StatusCode)
+	}
+
+	var raw struct {
+		ID string `json:"Id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return "", fmt.Errorf("parse server info response: %w", err)
+	}
+	return raw.ID, nil
+}
