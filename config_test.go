@@ -39,6 +39,12 @@ jellyfin:
   token: test-token
   user_id: test-user
   public_url: https://jellyfin.example.com
+radarr:
+  url: http://radarr:7878
+  token: radarr-key
+sonarr:
+  url: http://sonarr:8989
+  token: sonarr-key
 `)
 	cfg, err := LoadConfig(path)
 	if err != nil {
@@ -66,6 +72,11 @@ func TestLoadConfig_EnvOverrides(t *testing.T) {
 	setEnv(t, "TITLE", "Recently Added")
 	setEnv(t, "LIMIT", "20")
 	setEnv(t, "PUBLIC_URL", "/jellyfin-widget")
+	setEnv(t, "RADARR_URL", "http://radarr.internal:7878")
+	setEnv(t, "RADARR_TOKEN", "env-radarr-key")
+	setEnv(t, "SONARR_URL", "http://sonarr.internal:8989")
+	setEnv(t, "SONARR_TOKEN", "env-sonarr-key")
+	setEnv(t, "DOWNLOADING_LIMIT", "25")
 
 	// No jellyfin block in the file at all — env vars alone must supply it.
 	path := writeTempConfig(t, `title: ignored`)
@@ -102,10 +113,10 @@ func TestLoadConfig_MissingRequiredFieldsError(t *testing.T) {
 		yaml   string
 		wantIn string
 	}{
-		{"missing url", "jellyfin:\n  token: t\n  user_id: u\n  public_url: p", "jellyfin.url"},
-		{"missing token", "jellyfin:\n  url: u\n  user_id: u\n  public_url: p", "jellyfin.token"},
-		{"missing user_id", "jellyfin:\n  url: u\n  token: t\n  public_url: p", "jellyfin.user_id"},
-		{"missing public_url", "jellyfin:\n  url: u\n  token: t\n  user_id: u", "jellyfin.public_url"},
+		{"missing url", "jellyfin:\n  token: t\n  user_id: u\n  public_url: p\nradarr:\n  url: u\n  token: t\nsonarr:\n  url: u\n  token: t", "jellyfin.url"},
+		{"missing token", "jellyfin:\n  url: u\n  user_id: u\n  public_url: p\nradarr:\n  url: u\n  token: t\nsonarr:\n  url: u\n  token: t", "jellyfin.token"},
+		{"missing user_id", "jellyfin:\n  url: u\n  token: t\n  public_url: p\nradarr:\n  url: u\n  token: t\nsonarr:\n  url: u\n  token: t", "jellyfin.user_id"},
+		{"missing public_url", "jellyfin:\n  url: u\n  token: t\n  user_id: u\nradarr:\n  url: u\n  token: t\nsonarr:\n  url: u\n  token: t", "jellyfin.public_url"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -129,9 +140,124 @@ jellyfin:
   token: test-token
   user_id: test-user
   public_url: https://jellyfin.example.com
+radarr:
+  url: http://radarr:7878
+  token: radarr-key
+sonarr:
+  url: http://sonarr:8989
+  token: sonarr-key
 `)
 	_, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error for invalid LIMIT, got nil")
+	}
+}
+
+func TestLoadConfig_RadarrSonarrDefaults(t *testing.T) {
+	path := writeTempConfig(t, `
+jellyfin:
+  url: http://jellyfin:8096
+  token: test-token
+  user_id: test-user
+  public_url: https://jellyfin.example.com
+radarr:
+  url: http://radarr:7878
+  token: radarr-key
+sonarr:
+  url: http://sonarr:8989
+  token: sonarr-key
+`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Radarr.URL != "http://radarr:7878" || cfg.Radarr.Token != "radarr-key" {
+		t.Errorf("Radarr = %+v, want {http://radarr:7878 radarr-key}", cfg.Radarr)
+	}
+	if cfg.Sonarr.URL != "http://sonarr:8989" || cfg.Sonarr.Token != "sonarr-key" {
+		t.Errorf("Sonarr = %+v, want {http://sonarr:8989 sonarr-key}", cfg.Sonarr)
+	}
+	if cfg.DownloadingLimit != 12 {
+		t.Errorf("DownloadingLimit = %d, want 12 (default)", cfg.DownloadingLimit)
+	}
+}
+
+func TestLoadConfig_RadarrSonarrEnvOverrides(t *testing.T) {
+	setEnv(t, "JELLYFIN_URL", "http://jellyfin:8096")
+	setEnv(t, "JELLYFIN_TOKEN", "t")
+	setEnv(t, "JELLYFIN_USER_ID", "u")
+	setEnv(t, "JELLYFIN_PUBLIC_URL", "https://jf.example.com")
+	setEnv(t, "RADARR_URL", "http://radarr.internal:7878")
+	setEnv(t, "RADARR_TOKEN", "env-radarr-key")
+	setEnv(t, "SONARR_URL", "http://sonarr.internal:8989")
+	setEnv(t, "SONARR_TOKEN", "env-sonarr-key")
+	setEnv(t, "DOWNLOADING_LIMIT", "20")
+
+	path := writeTempConfig(t, `title: ignored`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Radarr.URL != "http://radarr.internal:7878" {
+		t.Errorf("Radarr.URL = %q, want env override", cfg.Radarr.URL)
+	}
+	if cfg.Radarr.Token != "env-radarr-key" {
+		t.Errorf("Radarr.Token = %q, want env override", cfg.Radarr.Token)
+	}
+	if cfg.Sonarr.URL != "http://sonarr.internal:8989" {
+		t.Errorf("Sonarr.URL = %q, want env override", cfg.Sonarr.URL)
+	}
+	if cfg.Sonarr.Token != "env-sonarr-key" {
+		t.Errorf("Sonarr.Token = %q, want env override", cfg.Sonarr.Token)
+	}
+	if cfg.DownloadingLimit != 20 {
+		t.Errorf("DownloadingLimit = %d, want 20", cfg.DownloadingLimit)
+	}
+}
+
+func TestLoadConfig_MissingRadarrSonarrFieldsError(t *testing.T) {
+	base := "jellyfin:\n  url: u\n  token: t\n  user_id: u\n  public_url: p\n"
+	cases := []struct {
+		name   string
+		yaml   string
+		wantIn string
+	}{
+		{"missing radarr.url", base + "radarr:\n  token: t\nsonarr:\n  url: u\n  token: t", "radarr.url"},
+		{"missing radarr.token", base + "radarr:\n  url: u\nsonarr:\n  url: u\n  token: t", "radarr.token"},
+		{"missing sonarr.url", base + "radarr:\n  url: u\n  token: t\nsonarr:\n  token: t", "sonarr.url"},
+		{"missing sonarr.token", base + "radarr:\n  url: u\n  token: t\nsonarr:\n  url: u", "sonarr.token"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			path := writeTempConfig(t, c.yaml)
+			_, err := LoadConfig(path)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), c.wantIn) {
+				t.Errorf("error = %v, want it to mention %q", err, c.wantIn)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_InvalidDownloadingLimitEnvErrors(t *testing.T) {
+	setEnv(t, "DOWNLOADING_LIMIT", "not-a-number")
+	path := writeTempConfig(t, `
+jellyfin:
+  url: http://jellyfin:8096
+  token: test-token
+  user_id: test-user
+  public_url: https://jellyfin.example.com
+radarr:
+  url: http://radarr:7878
+  token: radarr-key
+sonarr:
+  url: http://sonarr:8989
+  token: sonarr-key
+`)
+	_, err := LoadConfig(path)
+	if err == nil {
+		t.Fatal("expected error for invalid DOWNLOADING_LIMIT, got nil")
 	}
 }
