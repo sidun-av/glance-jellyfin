@@ -70,3 +70,67 @@ func TestRenderUnavailable_ShowsMessage(t *testing.T) {
 		t.Errorf("html = %q, want unavailable message", html)
 	}
 }
+
+func TestRenderWidget_CardHasDistinctPlayLink(t *testing.T) {
+	html := RenderWidget(WidgetData{Cards: []CardView{
+		{
+			Title:    "The Sheep Detectives",
+			ImageSrc: "/image/jellyfin/abc123",
+			Href:     "https://jellyfin.example/web/#/details?id=abc123",
+			PlayHref: "https://jellyfin.example/web/#/video?id=abc123&serverId=srv1",
+		},
+	}})
+	if !contains(html, `href="https://jellyfin.example/web/#/video?id=abc123&amp;serverId=srv1"`) {
+		t.Errorf("html missing play href: %q", html)
+	}
+	// Both the details link and the play link must exist as distinct
+	// elements — nesting an <a> inside another <a> is invalid HTML.
+	if !contains(html, `href="https://jellyfin.example/web/#/details?id=abc123"`) {
+		t.Errorf("html missing details href: %q", html)
+	}
+}
+
+func TestRenderWidget_DownloadingSectionOmittedWhenEmpty(t *testing.T) {
+	html := RenderWidget(WidgetData{Cards: nil, Downloading: nil})
+	if contains(html, "jf-dl-card") {
+		t.Errorf("html has a downloading card when Downloading is empty: %q", html)
+	}
+}
+
+func TestRenderWidget_RendersDownloadingCards(t *testing.T) {
+	html := RenderWidget(WidgetData{Downloading: []DownloadCardView{
+		{ItemID: "radarr-1", Title: "Downloading Movie", Poster: "/image/radarr/1", Status: "downloading", Percent: 42},
+		{ItemID: "sonarr-2", Title: "Searching Show", Poster: "/image/sonarr/2", Status: "searching"},
+	}})
+	if count(html, "jf-dl-card") != 2 {
+		t.Errorf("downloading card count wrong: %q", html)
+	}
+	if !contains(html, `data-item-id="radarr-1"`) {
+		t.Errorf("html missing data-item-id for downloading card: %q", html)
+	}
+	if !contains(html, `data-status="downloading"`) {
+		t.Errorf("html missing data-status=downloading: %q", html)
+	}
+	if !contains(html, "42%") {
+		t.Errorf("html missing percentage text: %q", html)
+	}
+	if !contains(html, `data-item-id="sonarr-2"`) || !contains(html, `data-status="searching"`) {
+		t.Errorf("html missing searching card markup: %q", html)
+	}
+	if !contains(html, "Searching") {
+		t.Errorf("html missing 'Searching' label: %q", html)
+	}
+}
+
+func TestRenderWidget_IncludesLiveBootstrapAttributes(t *testing.T) {
+	html := RenderWidget(WidgetData{LiveURL: "/jellyfin-widget/live.json", PollIntervalMS: 12000})
+	if !contains(html, `data-live-url="/jellyfin-widget/live.json"`) {
+		t.Errorf("html missing data-live-url: %q", html)
+	}
+	if !contains(html, `data-poll-ms="12000"`) {
+		t.Errorf("html missing data-poll-ms: %q", html)
+	}
+	if !contains(html, "onerror=") {
+		t.Errorf("html missing onerror bootstrap trick: %q", html)
+	}
+}
