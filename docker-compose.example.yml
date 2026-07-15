@@ -9,6 +9,11 @@ services:
       - JELLYFIN_TOKEN=${JELLYFIN_TOKEN}
       - JELLYFIN_USER_ID=${JELLYFIN_USER_ID}
       - JELLYFIN_PUBLIC_URL=${JELLYFIN_PUBLIC_URL}
+      # Required — where THIS service is reachable from the browser (see
+      # README's "Expose this service to your browser" step), so poster
+      # <img> URLs resolve to this container and not wherever else owns
+      # the site root.
+      - PUBLIC_URL=${PUBLIC_URL}
       # Optional — every one of these has a built-in default; only set the
       # ones you want to change. If you're deploying via a GUI stack manager
       # (e.g. Komodo, pointed at this repo), set these in its "Environment"

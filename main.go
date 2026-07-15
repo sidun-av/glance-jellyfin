@@ -45,7 +45,8 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	publicURL := strings.TrimRight(a.cfg.Jellyfin.PublicURL, "/")
+	jellyfinPublicURL := strings.TrimRight(a.cfg.Jellyfin.PublicURL, "/")
+	imagePrefix := strings.TrimRight(a.cfg.PublicURL, "/")
 	var cards []render.CardView
 	for _, it := range items {
 		if !it.HasImage {
@@ -53,8 +54,8 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		cards = append(cards, render.CardView{
 			Title:    it.Name,
-			ImageSrc: "/image/" + it.ID,
-			Href:     publicURL + "/web/#/details?id=" + it.ID,
+			ImageSrc: imagePrefix + "/image/" + it.ID,
+			Href:     jellyfinPublicURL + "/web/#/details?id=" + it.ID,
 		})
 	}
 
@@ -63,7 +64,15 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) imageHandler(w http.ResponseWriter, r *http.Request) {
-	itemID := strings.TrimPrefix(r.URL.Path, "/image/")
+	// This handler is reachable at both "/image/{id}" and
+	// "{public_url}/image/{id}" (see newMux) — strip whichever prefix is
+	// actually present, since a reverse proxy may or may not have
+	// stripped public_url before forwarding.
+	path := r.URL.Path
+	if prefix := strings.TrimRight(a.cfg.PublicURL, "/"); prefix != "" && strings.HasPrefix(path, prefix) {
+		path = strings.TrimPrefix(path, prefix)
+	}
+	itemID := strings.TrimPrefix(path, "/image/")
 	if !validItemID.MatchString(itemID) {
 		// Empty itemID and path-traversal/otherwise-malformed itemIDs are
 		// both rejected here, with the same 404 as a genuinely missing
@@ -103,6 +112,19 @@ func newMux(cfg *Config, a *app) *http.ServeMux {
 	})
 	mux.HandleFunc("/widget", a.widgetHandler)
 	mux.HandleFunc("/image/", a.imageHandler)
+
+	// A reverse proxy in front of this service may forward a Custom
+	// Location's full original path instead of stripping the public_url
+	// prefix (depends on proxy configuration details not every proxy UI
+	// makes easy to get right — see glance-homeassistant's README/history
+	// for the concrete failure mode this defends against). Registering
+	// the image handler under that prefix too means poster images work
+	// either way. Only applies when public_url is itself a path — a full
+	// origin is a distinct listener reached directly, with no such prefix
+	// ever attached.
+	if prefix := strings.TrimRight(cfg.PublicURL, "/"); strings.HasPrefix(prefix, "/") {
+		mux.HandleFunc(prefix+"/image/", a.imageHandler)
+	}
 	return mux
 }
 

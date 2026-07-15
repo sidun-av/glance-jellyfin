@@ -53,6 +53,9 @@ jellyfin:
 	if cfg.Jellyfin.URL != "http://jellyfin:8096" {
 		t.Errorf("Jellyfin.URL = %q, want http://jellyfin:8096", cfg.Jellyfin.URL)
 	}
+	if cfg.PublicURL != "" {
+		t.Errorf("PublicURL = %q, want empty (no forced default — site root)", cfg.PublicURL)
+	}
 }
 
 func TestLoadConfig_EnvOverrides(t *testing.T) {
@@ -62,6 +65,7 @@ func TestLoadConfig_EnvOverrides(t *testing.T) {
 	setEnv(t, "JELLYFIN_PUBLIC_URL", "https://jf.example.com")
 	setEnv(t, "TITLE", "Recently Added")
 	setEnv(t, "LIMIT", "20")
+	setEnv(t, "PUBLIC_URL", "/jellyfin-widget")
 
 	// No jellyfin block in the file at all — env vars alone must supply it.
 	path := writeTempConfig(t, `title: ignored`)
@@ -86,6 +90,9 @@ func TestLoadConfig_EnvOverrides(t *testing.T) {
 	}
 	if cfg.Limit != 20 {
 		t.Errorf("Limit = %d, want 20", cfg.Limit)
+	}
+	if cfg.PublicURL != "/jellyfin-widget" {
+		t.Errorf("PublicURL = %q, want env override", cfg.PublicURL)
 	}
 }
 

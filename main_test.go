@@ -74,6 +74,54 @@ func TestWidgetHandler_EndToEnd(t *testing.T) {
 	}
 }
 
+func TestWidgetHandler_ImageSrcPrefixedByPublicURL(t *testing.T) {
+	// The rendered <img src> is fetched by the BROWSER, not this container —
+	// if this service sits behind a reverse proxy at a path prefix (the
+	// same situation glance-homeassistant's PUBLIC_URL solves for
+	// /live.json), the src must include that prefix or the browser's
+	// request lands on whatever else owns the site root instead of this
+	// service.
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfig(jf.URL)
+	cfg.PublicURL = "/jellyfin-widget"
+	mux := newMux(cfg, newApp(cfg))
+
+	req := httptest.NewRequest(http.MethodGet, "/widget", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `src="/jellyfin-widget/image/abc123"`) {
+		t.Errorf("body = %q, want image src prefixed with public_url", body)
+	}
+}
+
+func TestImageHandler_ReachableAtPublicURLPrefix(t *testing.T) {
+	// Mirrors glance-homeassistant's equivalent test: some reverse proxies
+	// forward the full original path instead of stripping the location
+	// prefix, so this service must answer at both "/image/{id}" and
+	// "{public_url}/image/{id}" regardless of which one the proxy sends.
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfig(jf.URL)
+	cfg.PublicURL = "/jellyfin-widget"
+	mux := newMux(cfg, newApp(cfg))
+
+	req := httptest.NewRequest(http.MethodGet, "/jellyfin-widget/image/abc123", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (must be reachable whether or not the reverse proxy strips the public_url prefix)", rec.Code)
+	}
+	if rec.Body.String() != "fake-jpeg-bytes" {
+		t.Errorf("body = %q, want fake-jpeg-bytes", rec.Body.String())
+	}
+}
+
 func TestWidgetHandler_JellyfinUnavailable(t *testing.T) {
 	jf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

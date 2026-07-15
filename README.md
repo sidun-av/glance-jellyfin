@@ -12,7 +12,7 @@ request it asks Jellyfin for the most recently added movies/TV shows
 (`GET /Users/{userId}/Items/Latest`), renders them as a poster grid, and proxies each poster image
 through its own `/image/{itemId}` endpoint so your Jellyfin API key never reaches the browser.
 There's no live-update mechanism — a media library doesn't change on a 10-second cadence, so
-Glance's own `cache:` interval (see step 5 below) is all the freshness this needs.
+Glance's own `cache:` interval (see step 6 below) is all the freshness this needs.
 
 ## Setup
 
@@ -27,7 +27,28 @@ The "Latest Items" endpoint this widget uses is scoped to a specific user's libr
 access/view. In Jellyfin: **Admin Dashboard → Users → (your user)** — the user ID is in the page's
 URL (`.../userdetails?userId=<this-part>`).
 
-### 3. Configure
+### 3. Expose this service to your browser, not just to Glance
+
+Glance's own server calls `/widget` over your internal Docker network — that part just needs
+`JELLYFIN_URL`/`JELLYFIN_TOKEN`/`JELLYFIN_USER_ID` below. But each poster's `<img>` is loaded by
+the *browser*, so it needs its own route to this service's `/image/{id}`, reachable from wherever
+you actually open Glance (locally and/or externally).
+
+If you reverse-proxy Glance (e.g. NPMplus) on the same host/domain, add a location block that
+proxies a path prefix to this container, and it'll work from both local and external URLs
+automatically:
+
+```
+location /jellyfin-widget/ {
+    proxy_pass http://glance-jellyfin:8080/;
+}
+```
+
+Then set `public_url: /jellyfin-widget` in `config.yml` (see below). If you'd rather expose this
+container on its own LAN port instead, set `public_url` to that full origin, e.g.
+`http://192.168.1.50:8082`.
+
+### 4. Configure
 
 Every setting can be set as an environment variable — no file to create or mount. Env vars always
 take priority over `config.yml`, so the two approaches can be mixed if you want.
@@ -39,20 +60,22 @@ take priority over `config.yml`, so the two approaches can be mixed if you want.
 - `JELLYFIN_PUBLIC_URL` — Jellyfin's browser-facing base URL (e.g. `https://jellyfin.example.com`),
   used to build each poster's click-through link. Only needs to be reachable from *your browser*,
   not from this container.
+- `PUBLIC_URL` — reachable from *your browser* (see step 3 above). Not Jellyfin's own URL — this
+  is where *this service* is reachable from.
 
 See "Environment variable reference" below for the full list. If you'd rather hand-edit a file
 instead, copy [`config.example.yml`](config.example.yml) to `config.yml`, mount it at `/config.yml`,
 and skip the env vars it covers.
 
-### 4. Run it alongside Glance
+### 5. Run it alongside Glance
 
 **Option A — Komodo (or any GUI stack manager that can pull a stack from a git repo):**
 
 Point Komodo's Stack source at this repo (`sidun-av/glance-jellyfin`),
 [`docker-compose.example.yml`](docker-compose.example.yml) as the compose file. Then set
-`JELLYFIN_URL`/`JELLYFIN_TOKEN`/`JELLYFIN_USER_ID`/`JELLYFIN_PUBLIC_URL` (required) and any other
-overrides you want in the stack's Environment tab — nothing to SSH in and edit. Add it to the same
-Docker network as Jellyfin.
+`JELLYFIN_URL`/`JELLYFIN_TOKEN`/`JELLYFIN_USER_ID`/`JELLYFIN_PUBLIC_URL` (required), `PUBLIC_URL`
+(see step 3), and any other overrides you want in the stack's Environment tab — nothing to SSH in
+and edit. Add it to the same Docker network as Jellyfin.
 
 **Option B — plain `docker compose`:**
 
@@ -66,11 +89,12 @@ services:
       - JELLYFIN_TOKEN=${JELLYFIN_TOKEN}
       - JELLYFIN_USER_ID=${JELLYFIN_USER_ID}
       - JELLYFIN_PUBLIC_URL=https://jellyfin.example.com
+      - PUBLIC_URL=/jellyfin-widget
 ```
 
 Add it to the same Docker network as Jellyfin.
 
-### 5. Add the widget to Glance
+### 6. Add the widget to Glance
 
 ```yaml
 - type: extension
@@ -94,6 +118,7 @@ to use the built-in default (or whatever `config.yml` has, if you're mounting on
 | `JELLYFIN_TOKEN` | `jellyfin.token` | — (required) | Jellyfin API key |
 | `JELLYFIN_USER_ID` | `jellyfin.user_id` | — (required) | The Jellyfin user whose library access the "Latest Items" call uses |
 | `JELLYFIN_PUBLIC_URL` | `jellyfin.public_url` | — (required) | Jellyfin's browser-facing base URL, used for each poster's click-through link |
+| `PUBLIC_URL` | `public_url` | `""` (site root) | Path or origin *this service* is reachable at from the browser, used to prefix poster `<img>` URLs |
 | `TITLE` | `title` | `Library` | Widget title shown in Glance |
 | `LIMIT` | `limit` | `12` | Number of most-recently-added items to show |
 

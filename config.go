@@ -10,8 +10,15 @@ import (
 
 type Config struct {
 	Jellyfin JellyfinConfig `yaml:"jellyfin"`
-	Title    string         `yaml:"title"`
-	Limit    int            `yaml:"limit"`
+	// PublicURL is THIS service's own path/origin, reachable from the
+	// browser — used to prefix the poster <img src="..."> URLs so they
+	// reach this container through a reverse proxy, exactly like
+	// jellyfin.public_url is Jellyfin's own browser-facing URL for
+	// click-through links. Not required: "" means this service is served
+	// from the site root.
+	PublicURL string `yaml:"public_url"`
+	Title     string `yaml:"title"`
+	Limit     int    `yaml:"limit"`
 }
 
 type JellyfinConfig struct {
@@ -86,6 +93,9 @@ func applyEnvOverrides(cfg *Config) error {
 	}
 	if v, ok := lookupNonEmptyEnv("JELLYFIN_PUBLIC_URL"); ok {
 		cfg.Jellyfin.PublicURL = v
+	}
+	if v, ok := lookupNonEmptyEnv("PUBLIC_URL"); ok {
+		cfg.PublicURL = v
 	}
 	if v, ok := lookupNonEmptyEnv("TITLE"); ok {
 		cfg.Title = v
