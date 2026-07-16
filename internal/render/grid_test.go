@@ -1,6 +1,9 @@
 package render
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (func() bool {
@@ -221,5 +224,62 @@ func TestRenderWidget_BootstrapScriptKnowsAllStatusLabels(t *testing.T) {
 	}
 	if contains(html, "Searching…") {
 		t.Errorf("bootstrap script still has the old hardcoded ellipsis fallback: %q", html)
+	}
+}
+
+func TestRenderWidget_SeerrCardAppearsWhenConfigured(t *testing.T) {
+	html := RenderWidget(WidgetData{
+		Cards:    []CardView{{Title: "A Movie", ImageSrc: "/image/jellyfin/1", Href: "/x"}},
+		SeerrURL: "https://seerr.example.com",
+	})
+	if !contains(html, `class="jf-seerr-card"`) {
+		t.Errorf("html missing seerr card: %q", html)
+	}
+	if !contains(html, `href="https://seerr.example.com"`) {
+		t.Errorf("html missing seerr card href: %q", html)
+	}
+	if !contains(html, "Search movies") {
+		t.Errorf("html missing seerr card caption: %q", html)
+	}
+}
+
+func TestRenderWidget_SeerrCardAbsentWhenNotConfigured(t *testing.T) {
+	html := RenderWidget(WidgetData{
+		Cards: []CardView{{Title: "A Movie", ImageSrc: "/image/jellyfin/1", Href: "/x"}},
+	})
+	if contains(html, "jf-seerr-card") {
+		t.Errorf("html has a seerr card when SeerrURL is empty: %q", html)
+	}
+}
+
+func TestRenderWidget_SeerrCardIsLastInGrid(t *testing.T) {
+	html := RenderWidget(WidgetData{
+		Cards: []CardView{
+			{Title: "First", ImageSrc: "/image/jellyfin/1", Href: "/1"},
+			{Title: "Second", ImageSrc: "/image/jellyfin/2", Href: "/2"},
+		},
+		SeerrURL: "https://seerr.example.com",
+	})
+	lastCard := strings.LastIndex(html, `class="jf-card"`)
+	seerrCard := strings.Index(html, `class="jf-seerr-card"`)
+	if seerrCard < lastCard {
+		t.Errorf("seerr card is not positioned after the real cards: %q", html)
+	}
+}
+
+func TestRenderWidget_SeerrCardShowsEvenWhenLibraryEmpty(t *testing.T) {
+	html := RenderWidget(WidgetData{Cards: nil, SeerrURL: "https://seerr.example.com"})
+	if contains(html, "jf-empty") {
+		t.Errorf("html shows the empty-library message even though the seerr card should render: %q", html)
+	}
+	if !contains(html, `class="jf-seerr-card"`) {
+		t.Errorf("html missing seerr card when library is empty: %q", html)
+	}
+}
+
+func TestRenderWidget_SeerrCardEscapesURL(t *testing.T) {
+	html := RenderWidget(WidgetData{SeerrURL: `"><script>alert(1)</script>`})
+	if contains(html, `<script>alert(1)</script>`) {
+		t.Errorf("seerr URL not escaped: %q", html)
 	}
 }

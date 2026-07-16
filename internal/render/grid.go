@@ -16,6 +16,7 @@ type CardView struct {
 type WidgetData struct {
 	Cards          []CardView
 	Downloading    []DownloadCardView
+	SeerrURL       string
 	LiveURL        string
 	PollIntervalMS int
 }
@@ -27,7 +28,6 @@ func styleBlock() string {
 	.jf-card-link{display:block;color:inherit;text-decoration:none}
 	.jf-poster{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:6px;display:block;background:var(--color-widget-background-highlight)}
 	.jf-title{font-size:11px;color:var(--color-text-highlight);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-	.jf-empty{color:var(--color-text-subdue);font-size:.85em;padding:8px 0}
 	.jf-unavailable{color:var(--color-text-subdue);padding:12px 0}
 	.jf-play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding-left:3px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:18px;line-height:1}
 	.jf-play-btn:hover{background:rgba(0,0,0,.8)}
@@ -48,15 +48,25 @@ func RenderWidget(data WidgetData) string {
 	var b strings.Builder
 	b.WriteString(styleBlock())
 
+	if data.SeerrURL != "" {
+		b.WriteString(`<style>
+	.jf-seerr-card{display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:2/3;border:1px dashed var(--color-text-subdue);border-radius:6px;color:inherit;text-decoration:none;gap:6px}
+	.jf-seerr-icon{font-size:28px;opacity:.8}
+</style>`)
+	}
+
 	fmt.Fprintf(&b, `<div class="jf-widget" data-live-url="%s" data-poll-ms="%d">`,
 		html.EscapeString(data.LiveURL), data.PollIntervalMS)
 
-	if len(data.Cards) == 0 {
-		b.WriteString(`<div class="jf-empty">no recently added items found</div>`)
+	if len(data.Cards) == 0 && data.SeerrURL == "" {
+		b.WriteString(`<style>.jf-empty{color:var(--color-text-subdue);font-size:.85em;padding:8px 0}</style><div class="jf-empty">no recently added items found</div>`)
 	} else {
 		b.WriteString(`<div class="jf-grid">`)
 		for _, c := range data.Cards {
 			b.WriteString(renderCard(c))
+		}
+		if data.SeerrURL != "" {
+			b.WriteString(renderSeerrCard(data.SeerrURL))
 		}
 		b.WriteString(`</div>`)
 	}
@@ -85,6 +95,13 @@ func renderCard(c CardView) string {
 	}
 	b.WriteString(`</div>`)
 	return b.String()
+}
+
+func renderSeerrCard(seerrURL string) string {
+	return fmt.Sprintf(
+		`<a class="jf-seerr-card" href="%s" target="_blank" rel="noopener"><div class="jf-seerr-icon">&#128269;</div><div class="jf-title">Search movies</div></a>`,
+		html.EscapeString(seerrURL),
+	)
 }
 
 func RenderUnavailable() string {
