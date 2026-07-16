@@ -108,6 +108,30 @@ func TestPoller_SonarrMissingSeriesAlreadyInQueueStaysDownloading(t *testing.T) 
 	}
 }
 
+func TestPoller_SonarrMultipleMissingEpisodesDedupToOneSearchingCard(t *testing.T) {
+	sr := fakeSonarrServer(
+		`{"records":[]}`,
+		`{"records":[
+			{"seriesId":5,"series":{"title":"Some Show"}},
+			{"seriesId":5,"series":{"title":"Some Show"}}
+		]}`,
+	)
+	defer sr.Close()
+	rr := fakeRadarrServer(`{"records":[]}`, `{"records":[]}`)
+	defer rr.Close()
+
+	p := newDownloadPoller(radarr.New(rr.URL, "k"), sonarr.New(sr.URL, "k"), 12)
+	p.poll(context.Background())
+
+	got := p.Snapshot()
+	if len(got) != 1 {
+		t.Fatalf("len(snapshot) = %d, want 1 (one card per series): %+v", len(got), got)
+	}
+	if got[0].ItemID != "sonarr-5" || got[0].Status != "searching" {
+		t.Errorf("got[0] = %+v, want {sonarr-5 ... searching}", got[0])
+	}
+}
+
 func TestPoller_KeepsLastGoodSnapshotOnSourceFailure(t *testing.T) {
 	rr := fakeRadarrServer(`{"records":[{"movieId":1,"size":1000,"sizeleft":500,"movie":{"title":"M"}}]}`, `{"records":[]}`)
 	defer rr.Close()

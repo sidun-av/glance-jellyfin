@@ -109,8 +109,12 @@ func fetchRadarrCards(ctx context.Context, c *radarr.Client) ([]render.DownloadC
 	for _, d := range downloading {
 		cards = append(cards, d)
 	}
+	searching := make(map[int]bool, len(missing))
 	for _, m := range missing {
 		if _, alreadyDownloading := downloading[m.MovieID]; alreadyDownloading {
+			continue
+		}
+		if searching[m.MovieID] {
 			continue
 		}
 		cards = append(cards, render.DownloadCardView{
@@ -119,6 +123,7 @@ func fetchRadarrCards(ctx context.Context, c *radarr.Client) ([]render.DownloadC
 			Poster: fmt.Sprintf("/image/radarr/%d", m.MovieID),
 			Status: "searching",
 		})
+		searching[m.MovieID] = true
 	}
 	return cards, nil
 }
@@ -160,8 +165,12 @@ func fetchSonarrCards(ctx context.Context, c *sonarr.Client) ([]render.DownloadC
 			Percent: s.percent,
 		})
 	}
+	searching := make(map[int]bool, len(missing))
 	for _, m := range missing {
 		if _, alreadyDownloading := downloading[m.SeriesID]; alreadyDownloading {
+			continue
+		}
+		if searching[m.SeriesID] {
 			continue
 		}
 		cards = append(cards, render.DownloadCardView{
@@ -170,6 +179,7 @@ func fetchSonarrCards(ctx context.Context, c *sonarr.Client) ([]render.DownloadC
 			Poster: fmt.Sprintf("/image/sonarr/%d", m.SeriesID),
 			Status: "searching",
 		})
+		searching[m.SeriesID] = true
 	}
 	return cards, nil
 }
