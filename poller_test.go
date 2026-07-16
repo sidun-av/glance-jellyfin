@@ -193,6 +193,77 @@ func TestPoller_StartPollsImmediatelyThenOnInterval(t *testing.T) {
 	}
 }
 
+func TestClassifyStatus_PriorityOrder(t *testing.T) {
+	cases := []struct {
+		name          string
+		trackedStatus string
+		trackedState  string
+		want          string
+	}{
+		{"plain downloading", "ok", "downloading", "downloading"},
+		{"empty fields default to downloading", "", "", "downloading"},
+		{"importPending", "ok", "importPending", "importing"},
+		{"importing", "ok", "importing", "importing"},
+		{"warning stalls even mid-import", "warning", "importing", "stalled"},
+		{"error wins over warning-shaped state", "error", "importPending", "failed"},
+		{"error wins over plain downloading", "error", "downloading", "failed"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := classifyStatus(c.trackedStatus, c.trackedState)
+			if got != c.want {
+				t.Errorf("classifyStatus(%q, %q) = %q, want %q", c.trackedStatus, c.trackedState, got, c.want)
+			}
+		})
+	}
+}
+
+func TestPoller_RadarrUsesClassifiedStatus(t *testing.T) {
+	rr := fakeRadarrServer(
+		`{"records":[{"movieId":1,"size":1000,"sizeleft":500,"trackedDownloadStatus":"error","trackedDownloadState":"failed","movie":{"title":"Broken Movie"}}]}`,
+		`{"records":[]}`,
+	)
+	defer rr.Close()
+	sr := fakeSonarrServer(`{"records":[]}`, `{"records":[]}`)
+	defer sr.Close()
+
+	p := newDownloadPoller(radarr.New(rr.URL, "k"), sonarr.New(sr.URL, "k"), 12)
+	p.poll(context.Background())
+
+	got := p.Snapshot()
+	if len(got) != 1 || got[0].Status != "failed" {
+		t.Fatalf("snapshot = %+v, want one failed card", got)
+	}
+}
+
+func TestPoller_SonarrAggregatesBySeverityThenPercent(t *testing.T) {
+	// Two episodes of the same series: one 90% downloaded with no
+	// problems, one 10% downloaded but failed. The series card must
+	// surface the failed episode — severity beats percent, since the
+	// whole point of this feature is "show what needs attention".
+	sr := fakeSonarrServer(
+		`{"records":[
+			{"seriesId":5,"size":1000,"sizeleft":100,"trackedDownloadStatus":"ok","trackedDownloadState":"downloading","series":{"title":"Some Show"}},
+			{"seriesId":5,"size":1000,"sizeleft":900,"trackedDownloadStatus":"error","trackedDownloadState":"failed","series":{"title":"Some Show"}}
+		]}`,
+		`{"records":[]}`,
+	)
+	defer sr.Close()
+	rr := fakeRadarrServer(`{"records":[]}`, `{"records":[]}`)
+	defer rr.Close()
+
+	p := newDownloadPoller(radarr.New(rr.URL, "k"), sonarr.New(sr.URL, "k"), 12)
+	p.poll(context.Background())
+
+	got := p.Snapshot()
+	if len(got) != 1 {
+		t.Fatalf("len(snapshot) = %d, want 1 (one card per series)", len(got))
+	}
+	if got[0].Status != "failed" {
+		t.Errorf("Status = %q, want failed (severity beats percent)", got[0].Status)
+	}
+}
+
 func TestSortDownloadCards_TiesBreakByItemIDForDeterminism(t *testing.T) {
 	// Two "downloading" cards with identical Percent, and two "searching"
 	// cards with identical Title: without a final ItemID tiebreaker,

@@ -100,7 +100,7 @@ func fetchRadarrCards(ctx context.Context, c *radarr.Client) ([]render.DownloadC
 			ItemID:  fmt.Sprintf("radarr-%d", q.MovieID),
 			Title:   q.Title,
 			Poster:  fmt.Sprintf("/image/radarr/%d", q.MovieID),
-			Status:  "downloading",
+			Status:  classifyStatus(q.TrackedStatus, q.TrackedState),
 			Percent: percentComplete(q.Size, q.SizeLeft),
 		}
 	}
@@ -146,12 +146,17 @@ func fetchSonarrCards(ctx context.Context, c *sonarr.Client) ([]render.DownloadC
 	type seriesState struct {
 		title   string
 		percent int
+		status  string
 	}
 	downloading := make(map[int]seriesState, len(queue))
 	for _, q := range queue {
+		status := classifyStatus(q.TrackedStatus, q.TrackedState)
 		pct := percentComplete(q.Size, q.SizeLeft)
-		if existing, ok := downloading[q.SeriesID]; !ok || pct > existing.percent {
-			downloading[q.SeriesID] = seriesState{title: q.Title, percent: pct}
+		existing, ok := downloading[q.SeriesID]
+		if !ok ||
+			statusSeverity[status] > statusSeverity[existing.status] ||
+			(statusSeverity[status] == statusSeverity[existing.status] && pct > existing.percent) {
+			downloading[q.SeriesID] = seriesState{title: q.Title, percent: pct, status: status}
 		}
 	}
 
@@ -161,7 +166,7 @@ func fetchSonarrCards(ctx context.Context, c *sonarr.Client) ([]render.DownloadC
 			ItemID:  fmt.Sprintf("sonarr-%d", id),
 			Title:   s.title,
 			Poster:  fmt.Sprintf("/image/sonarr/%d", id),
-			Status:  "downloading",
+			Status:  s.status,
 			Percent: s.percent,
 		})
 	}
@@ -182,6 +187,37 @@ func fetchSonarrCards(ctx context.Context, c *sonarr.Client) ([]render.DownloadC
 		searching[m.SeriesID] = true
 	}
 	return cards, nil
+}
+
+// classifyStatus derives one of "downloading", "importing", "stalled", or
+// "failed" from Radarr/Sonarr's raw trackedDownloadStatus/trackedDownloadState
+// queue fields. Priority: an error always wins (something needs attention
+// right now), a warning wins over anything except an error (e.g. a stalled
+// torrent with no seeds), a still-processing-after-download state wins over
+// plain downloading, and the default is plain downloading — the common
+// case, when nothing above applies.
+func classifyStatus(trackedStatus, trackedState string) string {
+	switch {
+	case trackedStatus == "error":
+		return "failed"
+	case trackedStatus == "warning":
+		return "stalled"
+	case trackedState == "importPending" || trackedState == "importing":
+		return "importing"
+	default:
+		return "downloading"
+	}
+}
+
+// statusSeverity ranks the 4 queue-derived statuses by how much attention
+// they need, highest first — used to pick which episode represents a
+// Sonarr series when several are queued simultaneously with different
+// statuses (see fetchSonarrCards).
+var statusSeverity = map[string]int{
+	"failed":      3,
+	"stalled":     2,
+	"importing":   1,
+	"downloading": 0,
 }
 
 func percentComplete(size, sizeLeft int64) int {
