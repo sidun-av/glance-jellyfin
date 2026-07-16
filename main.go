@@ -9,7 +9,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/sidun-av/glance-jellyfin/internal/jellyfin"
@@ -34,9 +33,6 @@ type app struct {
 	radarrClient   *radarr.Client
 	sonarrClient   *sonarr.Client
 	poller         *downloadPoller
-
-	serverIDMu sync.Mutex
-	serverID   string
 }
 
 func newApp(cfg *Config) *app {
@@ -59,25 +55,6 @@ func liveURL(publicURL string) string {
 	return strings.TrimRight(publicURL, "/") + "/live.json"
 }
 
-// fetchServerIDCached fetches Jellyfin's server ID (needed for the Play
-// deep link) at most once per process: on failure it returns "" and leaves
-// nothing cached, so the next request retries rather than being stuck
-// without a Play link until a restart.
-func (a *app) fetchServerIDCached(ctx context.Context) string {
-	a.serverIDMu.Lock()
-	defer a.serverIDMu.Unlock()
-	if a.serverID != "" {
-		return a.serverID
-	}
-	id, err := a.jellyfinClient.FetchServerID(ctx)
-	if err != nil {
-		log.Printf("fetch jellyfin server id: %v", err)
-		return ""
-	}
-	a.serverID = id
-	return a.serverID
-}
-
 func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
@@ -95,23 +72,22 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 
 	jellyfinPublicURL := strings.TrimRight(a.cfg.Jellyfin.PublicURL, "/")
 	imagePrefix := strings.TrimRight(a.cfg.PublicURL, "/")
-	serverID := a.fetchServerIDCached(ctx)
 
 	var cards []render.CardView
 	for _, it := range items {
 		if !it.HasImage {
 			continue
 		}
+		// Jellyfin's web client has no URL-only deep link into playback
+		// (confirmed unimplemented: https://forum.jellyfin.org/t-direct-link-to-play-a-movie)
+		// — Play links to the same details page as the rest of the card,
+		// which has Jellyfin's own Play button.
 		href := jellyfinPublicURL + "/web/#/details?id=" + it.ID
-		playHref := href
-		if serverID != "" {
-			playHref = jellyfinPublicURL + "/web/#/video?id=" + it.ID + "&serverId=" + serverID
-		}
 		cards = append(cards, render.CardView{
 			Title:    it.Name,
 			ImageSrc: imagePrefix + "/image/jellyfin/" + it.ID,
 			Href:     href,
-			PlayHref: playHref,
+			PlayHref: href,
 		})
 	}
 

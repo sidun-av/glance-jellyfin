@@ -15,8 +15,12 @@ There's no live-update mechanism — a media library doesn't change on a 10-seco
 Glance's own `cache:` interval (see step 7 below) is all the freshness this needs.
 
 Two more pieces feed the widget: each Library card also gets a **Play**
-button that deep-links straight into Jellyfin's web player (not just its
-details page), and a **Downloading** section shows monitored-but-missing
+button, a distinct click target from the rest of the card, though it opens
+the same details page — Jellyfin's web client currently has no URL-only way
+to deep-link straight into playback (confirmed unimplemented upstream:
+https://forum.jellyfin.org/t-direct-link-to-play-a-movie), and the details
+page has Jellyfin's own Play button right there. And a **Downloading**
+section shows monitored-but-missing
 movies/shows sourced from Radarr and Sonarr — a "Searching…" label for
 items nothing's been grabbed for yet, and a live-updating progress bar
 (polled from `/live.json` every 12s in the browser) for items actively

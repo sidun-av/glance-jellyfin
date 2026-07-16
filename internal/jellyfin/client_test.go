@@ -152,35 +152,3 @@ func TestFetchImage_NonOKStatusReturnsStatusCodeNotError(t *testing.T) {
 		t.Errorf("StatusCode = %d, want 404", result.StatusCode)
 	}
 }
-
-func TestFetchServerID_ParsesID(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/System/Info/Public" {
-			t.Errorf("path = %s, want /System/Info/Public", r.URL.Path)
-		}
-		fmt.Fprint(w, `{"Id":"abc-server-id"}`)
-	}))
-	defer server.Close()
-
-	client := New(server.URL, "test-token", "test-user")
-	id, err := client.FetchServerID(context.Background())
-	if err != nil {
-		t.Fatalf("FetchServerID: %v", err)
-	}
-	if id != "abc-server-id" {
-		t.Errorf("id = %q, want abc-server-id", id)
-	}
-}
-
-func TestFetchServerID_NonOKStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	client := New(server.URL, "test-token", "test-user")
-	_, err := client.FetchServerID(context.Background())
-	if err == nil {
-		t.Fatal("expected error for 500 response, got nil")
-	}
-}

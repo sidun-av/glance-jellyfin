@@ -297,7 +297,15 @@ func testConfigWithServarr(t *testing.T, jellyfinURL string) *Config {
 	return cfg
 }
 
-func TestWidgetHandler_IncludesPlayHrefUsingServerID(t *testing.T) {
+func TestWidgetHandler_PlayHrefMatchesDetailsHref(t *testing.T) {
+	// Jellyfin's web client has no URL-only deep link into playback — see
+	// https://forum.jellyfin.org/t-direct-link-to-play-a-movie, where a
+	// Jellyfin core team member confirms this isn't currently possible. The
+	// Play button links to the same details page as the rest of the card,
+	// which has Jellyfin's own Play button. This must hold true even when a
+	// server ID is available (a fake /System/Info/Public is served below)
+	// — a prior version special-cased this into a "#/video?...&serverId=..."
+	// URL that Jellyfin's web client doesn't actually support.
 	jf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/System/Info/Public":
@@ -322,8 +330,12 @@ func TestWidgetHandler_IncludesPlayHrefUsingServerID(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `href="https://jellyfin.example.com/web/#/video?id=abc123&amp;serverId=srv1"`) {
-		t.Errorf("body missing play href with server id: %s", body)
+	if strings.Contains(body, "/web/#/video?") {
+		t.Errorf("body still contains the unsupported #/video deep link: %s", body)
+	}
+	wantHref := `href="https://jellyfin.example.com/web/#/details?id=abc123"`
+	if got := strings.Count(body, wantHref); got != 2 {
+		t.Errorf("want %q to appear twice (details link + play button), got %d times in body: %s", wantHref, got, body)
 	}
 }
 
