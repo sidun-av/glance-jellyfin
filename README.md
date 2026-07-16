@@ -10,9 +10,9 @@ A small Go HTTP service Glance calls on its own schedule (a Glance
 [extension widget](https://github.com/glanceapp/glance/blob/main/docs/extensions.md)). On each
 request it asks Jellyfin for the most recently added movies/TV shows
 (`GET /Users/{userId}/Items/Latest`), renders them as a poster grid, and proxies each poster image
-through its own `/image/{itemId}` endpoint so your Jellyfin API key never reaches the browser.
+through its own `/image/{source}/{id}` endpoint (where `source` is one of `jellyfin`, `radarr`, or `sonarr`) so your Jellyfin API key never reaches the browser.
 There's no live-update mechanism — a media library doesn't change on a 10-second cadence, so
-Glance's own `cache:` interval (see step 6 below) is all the freshness this needs.
+Glance's own `cache:` interval (see step 7 below) is all the freshness this needs.
 
 Two more pieces feed the widget: each Library card also gets a **Play**
 button that deep-links straight into Jellyfin's web player (not just its
@@ -48,7 +48,7 @@ need no "public" browser-facing counterpart.
 
 Glance's own server calls `/widget` over your internal Docker network — that part just needs
 `JELLYFIN_URL`/`JELLYFIN_TOKEN`/`JELLYFIN_USER_ID` below. But each poster's `<img>` is loaded by
-the *browser*, so it needs its own route to this service's `/image/{id}`, reachable from wherever
+the *browser*, so it needs its own route to this service's `/image/{source}/{id}` endpoints, reachable from wherever
 you actually open Glance (locally and/or externally).
 
 If you reverse-proxy Glance (e.g. NPMplus) on the same host/domain, add a location block that
@@ -94,7 +94,7 @@ and skip the env vars it covers.
 Point Komodo's Stack source at this repo (`sidun-av/glance-jellyfin`),
 [`docker-compose.example.yml`](docker-compose.example.yml) as the compose file. Then set
 `JELLYFIN_URL`/`JELLYFIN_TOKEN`/`JELLYFIN_USER_ID`/`JELLYFIN_PUBLIC_URL` (required), `PUBLIC_URL`
-(see step 3), and any other overrides you want in the stack's Environment tab — nothing to SSH in
+(see step 4), and any other overrides you want in the stack's Environment tab — nothing to SSH in
 and edit. Add it to the same Docker network as Jellyfin.
 
 **Option B — plain `docker compose`:**
