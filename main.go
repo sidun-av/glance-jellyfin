@@ -124,6 +124,7 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, render.RenderWidget(render.WidgetData{
 		Cards:          cards,
 		Downloading:    downloadingCards,
+		SeerrURL:       strings.TrimRight(a.cfg.Seerr.PublicURL, "/"),
 		LiveURL:        liveURL(a.cfg.PublicURL),
 		PollIntervalMS: liveClientPollMS,
 	}))

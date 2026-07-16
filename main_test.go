@@ -463,3 +463,42 @@ func TestImageHandler_UnknownSourceReturns404(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
+
+func TestWidgetHandler_IncludesSeerrCardWhenConfigured(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	cfg.Seerr.PublicURL = "https://seerr.example.com"
+	a := newApp(cfg)
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/widget", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="jf-seerr-card"`) {
+		t.Errorf("body missing seerr card: %s", body)
+	}
+	if !strings.Contains(body, `href="https://seerr.example.com"`) {
+		t.Errorf("body missing seerr card href: %s", body)
+	}
+}
+
+func TestWidgetHandler_OmitsSeerrCardWhenNotConfigured(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL) // cfg.Seerr.PublicURL left empty
+	a := newApp(cfg)
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/widget", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if strings.Contains(rec.Body.String(), "jf-seerr-card") {
+		t.Errorf("body has a seerr card when Seerr.PublicURL is unset: %s", rec.Body.String())
+	}
+}
