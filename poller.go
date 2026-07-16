@@ -235,22 +235,33 @@ func percentComplete(size, sizeLeft int64) int {
 	}
 }
 
-// sortDownloadCards orders downloading items first (highest percent first,
-// so the closest-to-done card leads), then searching items alphabetically.
-// Ties fall back to ItemID: the pre-sort slice order comes from Go map
-// iteration (non-deterministic) in fetchRadarrCards/fetchSonarrCards, and
-// sort.Slice isn't stable, so without this a tie's relative order could
-// vary between polls.
+// displayOrder ranks statuses for the Downloading section's card ordering:
+// downloading cards lead (matches this section's original design — "what's
+// actively happening" first), then non-downloading cards are ordered by how
+// much attention they need (failed > stalled > importing > searching), with
+// title/ItemID as final deterministic tiebreaks. This must stay a *total*
+// order across every known status — a sort.Slice comparator that treats two
+// different statuses as equal (returns false both directions) makes the
+// final order depend on the pre-sort slice's order, which comes from
+// non-deterministic Go map iteration in fetchRadarrCards/fetchSonarrCards.
+var displayOrder = map[string]int{
+	"downloading": 0,
+	"failed":      1,
+	"stalled":     2,
+	"importing":   3,
+	"searching":   4,
+}
+
 func sortDownloadCards(cards []render.DownloadCardView) {
 	sort.Slice(cards, func(i, j int) bool {
 		a, b := cards[i], cards[j]
-		if a.Status != b.Status {
-			return a.Status == "downloading"
+		if displayOrder[a.Status] != displayOrder[b.Status] {
+			return displayOrder[a.Status] < displayOrder[b.Status]
 		}
 		if a.Status == "downloading" && a.Percent != b.Percent {
 			return a.Percent > b.Percent
 		}
-		if a.Status != "downloading" && a.Title != b.Title {
+		if a.Title != b.Title {
 			return a.Title < b.Title
 		}
 		return a.ItemID < b.ItemID
