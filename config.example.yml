@@ -19,6 +19,9 @@ sonarr:
   url: http://sonarr:8989   # env: SONARR_URL
   token: replace-with-a-sonarr-api-key   # env: SONARR_TOKEN — Settings -> General -> Security
 
+seerr:
+  public_url: https://seerr.example.com   # env: SEERR_PUBLIC_URL — optional; omit entirely to leave the "Search movies" card off the widget
+
 public_url: /jellyfin-widget   # env: PUBLIC_URL — path (reverse-proxied, same origin as Glance) or full origin (direct LAN port) THIS service is reachable at from the browser, used to prefix poster <img> URLs
 
 title: Library   # env: TITLE

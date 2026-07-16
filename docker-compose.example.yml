@@ -25,6 +25,7 @@ services:
       - TITLE=${TITLE:-}
       - LIMIT=${LIMIT:-}
       - DOWNLOADING_LIMIT=${DOWNLOADING_LIMIT:-}
+      - SEERR_PUBLIC_URL=${SEERR_PUBLIC_URL:-}
     # Optional: mount a hand-edited config.yml instead of (or alongside) the
     # environment variables above — see config.example.yml. Not needed for a
     # GUI/env-var-only setup; env vars always take priority over this file.

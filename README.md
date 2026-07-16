@@ -24,6 +24,14 @@ downloading. Radarr's and Sonarr's own `/api/v3/queue` already reports
 download-client progress, so this widget never talks to qBittorrent or
 Prowlarr directly.
 
+The Downloading section's cards also carry more than just "searching" or
+"downloading": Radarr/Sonarr's queue already reports whether a download is
+still processing after finishing ("Importing…"), stuck with no progress
+("Stalled", shown in amber), or has outright failed ("Failed", shown in
+red) — this widget surfaces all of it instead of just the two most common
+states. A separate, always-present card at the end of the Library grid
+links straight to Seerr's search page, if you've set `SEERR_PUBLIC_URL`.
+
 ## Setup
 
 ### 1. Create a Jellyfin API key
@@ -129,6 +137,14 @@ show up reasonably promptly. Progress *numbers* update independently via
 `/live.json` every 12 seconds in the browser, so they stay live between
 these 3-minute refreshes.
 
+### 8. (Optional) Link to Seerr
+
+If you run [Seerr](https://github.com/Fallenbagel/jellyseerr) (or Overseerr)
+for content requests, set `SEERR_PUBLIC_URL` to its browser-facing URL and a
+"Search movies" card appears at the end of the Library grid, linking there.
+This is a static link only — this widget makes no Seerr API calls, so
+there's no token to configure.
+
 ## Environment variable reference
 
 Every one of these overrides the matching `config.yml` field when set to a non-empty value — set
@@ -149,6 +165,7 @@ to use the built-in default (or whatever `config.yml` has, if you're mounting on
 | `TITLE` | `title` | `Library` | Widget title shown in Glance |
 | `LIMIT` | `limit` | `12` | Number of most-recently-added items to show |
 | `DOWNLOADING_LIMIT` | `downloading_limit` | `12` | Max cards shown in the Downloading section |
+| `SEERR_PUBLIC_URL` | `seerr.public_url` | `""` (card omitted) | Seerr's browser-facing URL for the "Search movies" card — optional |
 
 The service's own listen port and config-file path aren't `config.yml` fields — they're read from
 the environment before any config is loaded, so they're always plain environment variables:
@@ -169,6 +186,11 @@ If Radarr or Sonarr is unreachable, the Downloading section simply omits
 that source's cards (the rest of the widget, including the other source's
 cards, is unaffected) — consistent with the rest of this widget's
 philosophy of degrading quietly rather than surfacing a broken state.
+
+If a Radarr/Sonarr download hits a problem, the Downloading section shows
+that specific card as "Stalled" or "Failed" in a distinct color rather than
+silently leaving it looking like every other download — that's the point of
+the richer status model, not something to work around.
 
 ## Out of scope (for now)
 
