@@ -261,3 +261,47 @@ sonarr:
 		t.Fatal("expected error for invalid DOWNLOADING_LIMIT, got nil")
 	}
 }
+
+func TestLoadConfig_SeerrOptional(t *testing.T) {
+	path := writeTempConfig(t, `
+jellyfin:
+  url: http://jellyfin:8096
+  token: test-token
+  user_id: test-user
+  public_url: https://jellyfin.example.com
+radarr:
+  url: http://radarr:7878
+  token: radarr-key
+sonarr:
+  url: http://sonarr:8989
+  token: sonarr-key
+`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v (seerr must be optional)", err)
+	}
+	if cfg.Seerr.PublicURL != "" {
+		t.Errorf("Seerr.PublicURL = %q, want empty (no config given)", cfg.Seerr.PublicURL)
+	}
+}
+
+func TestLoadConfig_SeerrEnvOverride(t *testing.T) {
+	setEnv(t, "JELLYFIN_URL", "http://jellyfin:8096")
+	setEnv(t, "JELLYFIN_TOKEN", "t")
+	setEnv(t, "JELLYFIN_USER_ID", "u")
+	setEnv(t, "JELLYFIN_PUBLIC_URL", "https://jf.example.com")
+	setEnv(t, "RADARR_URL", "http://radarr:7878")
+	setEnv(t, "RADARR_TOKEN", "r")
+	setEnv(t, "SONARR_URL", "http://sonarr:8989")
+	setEnv(t, "SONARR_TOKEN", "s")
+	setEnv(t, "SEERR_PUBLIC_URL", "https://seerr.example.com")
+
+	path := writeTempConfig(t, `title: ignored`)
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Seerr.PublicURL != "https://seerr.example.com" {
+		t.Errorf("Seerr.PublicURL = %q, want env override", cfg.Seerr.PublicURL)
+	}
+}

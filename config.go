@@ -12,6 +12,7 @@ type Config struct {
 	Jellyfin JellyfinConfig `yaml:"jellyfin"`
 	Radarr   RadarrConfig   `yaml:"radarr"`
 	Sonarr   SonarrConfig   `yaml:"sonarr"`
+	Seerr    SeerrConfig    `yaml:"seerr"`
 	// PublicURL is THIS service's own path/origin, reachable from the
 	// browser — used to prefix the poster <img src="..."> URLs so they
 	// reach this container through a reverse proxy, exactly like
@@ -42,6 +43,14 @@ type RadarrConfig struct {
 type SonarrConfig struct {
 	URL   string `yaml:"url"`
 	Token string `yaml:"token"`
+}
+
+// SeerrConfig.PublicURL is optional — empty means the Library grid's
+// "Search movies" card simply doesn't render. Unlike Radarr/Sonarr, this
+// widget makes no Seerr API calls at all (it's a static link), so there's
+// no token field here.
+type SeerrConfig struct {
+	PublicURL string `yaml:"public_url"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -139,6 +148,9 @@ func applyEnvOverrides(cfg *Config) error {
 	}
 	if v, ok := lookupNonEmptyEnv("SONARR_TOKEN"); ok {
 		cfg.Sonarr.Token = v
+	}
+	if v, ok := lookupNonEmptyEnv("SEERR_PUBLIC_URL"); ok {
+		cfg.Seerr.PublicURL = v
 	}
 	if v, ok := lookupNonEmptyEnv("PUBLIC_URL"); ok {
 		cfg.PublicURL = v
