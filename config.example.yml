@@ -11,8 +11,18 @@ jellyfin:
   user_id: replace-with-a-jellyfin-user-id   # env: JELLYFIN_USER_ID
   public_url: https://jellyfin.example.com   # env: JELLYFIN_PUBLIC_URL — browser-facing base URL, used for each card's click-through link
 
+radarr:
+  url: http://radarr:7878   # env: RADARR_URL
+  token: replace-with-a-radarr-api-key   # env: RADARR_TOKEN — Settings -> General -> Security
+
+sonarr:
+  url: http://sonarr:8989   # env: SONARR_URL
+  token: replace-with-a-sonarr-api-key   # env: SONARR_TOKEN — Settings -> General -> Security
+
 public_url: /jellyfin-widget   # env: PUBLIC_URL — path (reverse-proxied, same origin as Glance) or full origin (direct LAN port) THIS service is reachable at from the browser, used to prefix poster <img> URLs
 
 title: Library   # env: TITLE
 
 limit: 12   # env: LIMIT — number of most-recently-added items to show
+
+downloading_limit: 12   # env: DOWNLOADING_LIMIT — max cards shown in the Downloading section

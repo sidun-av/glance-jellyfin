@@ -9,6 +9,10 @@ services:
       - JELLYFIN_TOKEN=${JELLYFIN_TOKEN}
       - JELLYFIN_USER_ID=${JELLYFIN_USER_ID}
       - JELLYFIN_PUBLIC_URL=${JELLYFIN_PUBLIC_URL}
+      - RADARR_URL=${RADARR_URL}
+      - RADARR_TOKEN=${RADARR_TOKEN}
+      - SONARR_URL=${SONARR_URL}
+      - SONARR_TOKEN=${SONARR_TOKEN}
       # Required — where THIS service is reachable from the browser (see
       # README's "Expose this service to your browser" step), so poster
       # <img> URLs resolve to this container and not wherever else owns
@@ -20,6 +24,7 @@ services:
       # tab and you never need to touch a config file at all.
       - TITLE=${TITLE:-}
       - LIMIT=${LIMIT:-}
+      - DOWNLOADING_LIMIT=${DOWNLOADING_LIMIT:-}
     # Optional: mount a hand-edited config.yml instead of (or alongside) the
     # environment variables above — see config.example.yml. Not needed for a
     # GUI/env-var-only setup; env vars always take priority over this file.
