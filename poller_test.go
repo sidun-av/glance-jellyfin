@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sidun-av/glance-jellyfin/internal/radarr"
+	"github.com/sidun-av/glance-jellyfin/internal/render"
 	"github.com/sidun-av/glance-jellyfin/internal/sonarr"
 )
 
@@ -189,5 +190,31 @@ func TestPoller_StartPollsImmediatelyThenOnInterval(t *testing.T) {
 	}
 	if len(p.Snapshot()) != 1 {
 		t.Fatalf("Start did not populate the snapshot immediately: got %d items", len(p.Snapshot()))
+	}
+}
+
+func TestSortDownloadCards_TiesBreakByItemIDForDeterminism(t *testing.T) {
+	// Two "downloading" cards with identical Percent, and two "searching"
+	// cards with identical Title: without a final ItemID tiebreaker,
+	// sort.Slice (not a stable sort) can order these differently between
+	// calls, since the pre-sort order comes from Go map iteration
+	// (non-deterministic) in fetchRadarrCards/fetchSonarrCards.
+	cards := []render.DownloadCardView{
+		{ItemID: "radarr-2", Status: "downloading", Percent: 50},
+		{ItemID: "radarr-1", Status: "downloading", Percent: 50},
+		{ItemID: "sonarr-2", Status: "searching", Title: "Same Title"},
+		{ItemID: "sonarr-1", Status: "searching", Title: "Same Title"},
+	}
+	sortDownloadCards(cards)
+
+	want := []string{"radarr-1", "radarr-2", "sonarr-1", "sonarr-2"}
+	got := make([]string, len(cards))
+	for i, c := range cards {
+		got[i] = c.ItemID
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v, want %v (ties must break by ItemID)", got, want)
+		}
 	}
 }

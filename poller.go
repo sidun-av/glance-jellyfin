@@ -201,15 +201,22 @@ func percentComplete(size, sizeLeft int64) int {
 
 // sortDownloadCards orders downloading items first (highest percent first,
 // so the closest-to-done card leads), then searching items alphabetically.
+// Ties fall back to ItemID: the pre-sort slice order comes from Go map
+// iteration (non-deterministic) in fetchRadarrCards/fetchSonarrCards, and
+// sort.Slice isn't stable, so without this a tie's relative order could
+// vary between polls.
 func sortDownloadCards(cards []render.DownloadCardView) {
 	sort.Slice(cards, func(i, j int) bool {
 		a, b := cards[i], cards[j]
 		if a.Status != b.Status {
 			return a.Status == "downloading"
 		}
-		if a.Status == "downloading" {
+		if a.Status == "downloading" && a.Percent != b.Percent {
 			return a.Percent > b.Percent
 		}
-		return a.Title < b.Title
+		if a.Status != "downloading" && a.Title != b.Title {
+			return a.Title < b.Title
+		}
+		return a.ItemID < b.ItemID
 	})
 }
