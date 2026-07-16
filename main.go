@@ -115,10 +115,15 @@ func (a *app) widgetHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	downloadingCards := a.poller.Snapshot()
+	for i := range downloadingCards {
+		downloadingCards[i].Poster = imagePrefix + downloadingCards[i].Poster
+	}
+
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, render.RenderWidget(render.WidgetData{
 		Cards:          cards,
-		Downloading:    a.poller.Snapshot(),
+		Downloading:    downloadingCards,
 		LiveURL:        liveURL(a.cfg.PublicURL),
 		PollIntervalMS: liveClientPollMS,
 	}))

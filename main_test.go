@@ -275,6 +275,9 @@ func fakeSonarrServerForApp(t *testing.T) *httptest.Server {
 			fmt.Fprint(w, `{"records":[]}`)
 		case "/api/v3/wanted/missing":
 			fmt.Fprint(w, `{"records":[]}`)
+		case "/api/v3/MediaCover/2/poster.jpg":
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write([]byte("fake-sonarr-poster"))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -346,6 +349,31 @@ func TestWidgetHandler_IncludesDownloadingCards(t *testing.T) {
 	}
 }
 
+func TestWidgetHandler_DownloadingPosterPrefixedByPublicURL(t *testing.T) {
+	// Same reasoning as TestWidgetHandler_ImageSrcPrefixedByPublicURL, but for
+	// the Downloading section: its cards come straight from the poller's
+	// snapshot (poller.go is deployment-agnostic by design and knows nothing
+	// about PublicURL), so the handler — not the poller — must prefix the
+	// poster src the same way it already does for Jellyfin cards.
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	cfg.PublicURL = "/jellyfin-widget"
+	a := newApp(cfg)
+	a.poller.poll(context.Background())
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/widget", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `src="/jellyfin-widget/image/radarr/1"`) {
+		t.Errorf("body = %q, want downloading poster src prefixed with public_url", body)
+	}
+}
+
 func TestLiveHandler_ServesPollerSnapshot(t *testing.T) {
 	jf := fakeJellyfinServer(t)
 	defer jf.Close()
@@ -405,6 +433,17 @@ func TestImageHandler_RoutesRadarrAndSonarrByPrefix(t *testing.T) {
 	}
 	if rec.Body.String() != "fake-radarr-poster" {
 		t.Errorf("body = %q, want fake-radarr-poster", rec.Body.String())
+	}
+
+	sonarrReq := httptest.NewRequest(http.MethodGet, "/image/sonarr/2", nil)
+	sonarrRec := httptest.NewRecorder()
+	mux.ServeHTTP(sonarrRec, sonarrReq)
+
+	if sonarrRec.Code != http.StatusOK {
+		t.Fatalf("sonarr status = %d, want 200", sonarrRec.Code)
+	}
+	if sonarrRec.Body.String() != "fake-sonarr-poster" {
+		t.Errorf("sonarr body = %q, want fake-sonarr-poster", sonarrRec.Body.String())
 	}
 }
 
