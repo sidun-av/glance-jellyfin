@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,8 +35,15 @@ func testConfig(jellyfinURL string) *Config {
 			UserID:    "test-user",
 			PublicURL: "https://jellyfin.example.com",
 		},
-		Title: "Library",
-		Limit: 12,
+		// 127.0.0.1:1 is a reserved port nothing listens on: "connection
+		// refused" comes back near-instantly with no DNS lookup involved,
+		// unlike a made-up hostname (which could stall on a slow negative
+		// DNS lookup depending on the test environment's resolver).
+		Radarr:           RadarrConfig{URL: "http://127.0.0.1:1", Token: "radarr-key"},
+		Sonarr:           SonarrConfig{URL: "http://127.0.0.1:1", Token: "sonarr-key"},
+		Title:            "Library",
+		Limit:            12,
+		DownloadingLimit: 12,
 	}
 }
 
@@ -63,7 +71,7 @@ func TestWidgetHandler_EndToEnd(t *testing.T) {
 	if !strings.Contains(body, "The Sheep Detectives") {
 		t.Errorf("body missing item title")
 	}
-	if !strings.Contains(body, `src="/image/abc123"`) {
+	if !strings.Contains(body, `src="/image/jellyfin/abc123"`) {
 		t.Errorf("body missing image proxy src")
 	}
 	if !strings.Contains(body, `href="https://jellyfin.example.com/web/#/details?id=abc123"`) {
@@ -93,7 +101,7 @@ func TestWidgetHandler_ImageSrcPrefixedByPublicURL(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `src="/jellyfin-widget/image/abc123"`) {
+	if !strings.Contains(body, `src="/jellyfin-widget/image/jellyfin/abc123"`) {
 		t.Errorf("body = %q, want image src prefixed with public_url", body)
 	}
 }
@@ -110,7 +118,7 @@ func TestImageHandler_ReachableAtPublicURLPrefix(t *testing.T) {
 	cfg.PublicURL = "/jellyfin-widget"
 	mux := newMux(cfg, newApp(cfg))
 
-	req := httptest.NewRequest(http.MethodGet, "/jellyfin-widget/image/abc123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/jellyfin-widget/image/jellyfin/abc123", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -150,7 +158,7 @@ func TestImageHandler_ProxiesImageBytes(t *testing.T) {
 	cfg := testConfig(jf.URL)
 	mux := newMux(cfg, newApp(cfg))
 
-	req := httptest.NewRequest(http.MethodGet, "/image/abc123", nil)
+	req := httptest.NewRequest(http.MethodGet, "/image/jellyfin/abc123", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -175,7 +183,7 @@ func TestImageHandler_MissingImageReturns404(t *testing.T) {
 	cfg := testConfig(jf.URL)
 	mux := newMux(cfg, newApp(cfg))
 
-	req := httptest.NewRequest(http.MethodGet, "/image/does-not-exist", nil)
+	req := httptest.NewRequest(http.MethodGet, "/image/jellyfin/does-not-exist", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -213,9 +221,9 @@ func TestImageHandler_RejectsPathTraversalItemID(t *testing.T) {
 	// itemID allow-list, TrimPrefix would yield itemID == "../secret",
 	// which FetchImage splices unescaped into the outbound Jellyfin request
 	// URL.
-	req := httptest.NewRequest(http.MethodGet, "/image/%2e%2e%2Fsecret", nil)
-	if req.URL.Path != "/image/../secret" {
-		t.Fatalf("test setup invalid: req.URL.Path = %q, want %q (this test doesn't exercise the decoded-path scenario it's meant to)", req.URL.Path, "/image/../secret")
+	req := httptest.NewRequest(http.MethodGet, "/image/jellyfin/%2e%2e%2Fsecret", nil)
+	if req.URL.Path != "/image/jellyfin/../secret" {
+		t.Fatalf("test setup invalid: req.URL.Path = %q, want %q (this test doesn't exercise the decoded-path scenario it's meant to)", req.URL.Path, "/image/jellyfin/../secret")
 	}
 
 	rec := httptest.NewRecorder()
@@ -239,5 +247,180 @@ func TestHealthzHandler(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+func fakeRadarrServerForApp(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v3/queue":
+			fmt.Fprint(w, `{"records":[{"movieId":1,"size":1000,"sizeleft":500,"movie":{"title":"Downloading Movie"}}]}`)
+		case "/api/v3/wanted/missing":
+			fmt.Fprint(w, `{"records":[]}`)
+		case "/api/v3/MediaCover/1/poster.jpg":
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write([]byte("fake-radarr-poster"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func fakeSonarrServerForApp(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v3/queue":
+			fmt.Fprint(w, `{"records":[]}`)
+		case "/api/v3/wanted/missing":
+			fmt.Fprint(w, `{"records":[]}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+}
+
+func testConfigWithServarr(t *testing.T, jellyfinURL string) *Config {
+	t.Helper()
+	radarrSrv := fakeRadarrServerForApp(t)
+	t.Cleanup(radarrSrv.Close)
+	sonarrSrv := fakeSonarrServerForApp(t)
+	t.Cleanup(sonarrSrv.Close)
+
+	cfg := testConfig(jellyfinURL)
+	cfg.Radarr.URL = radarrSrv.URL
+	cfg.Sonarr.URL = sonarrSrv.URL
+	return cfg
+}
+
+func TestWidgetHandler_IncludesPlayHrefUsingServerID(t *testing.T) {
+	jf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/System/Info/Public":
+			fmt.Fprint(w, `{"Id":"srv1"}`)
+		case r.URL.Path == "/Users/test-user/Items/Latest":
+			fmt.Fprint(w, `[{"Id":"abc123","Name":"The Sheep Detectives","Type":"Series","ImageTags":{"Primary":"tag1"}}]`)
+		case r.URL.Path == "/Items/abc123/Images/Primary":
+			w.Header().Set("Content-Type", "image/jpeg")
+			w.Write([]byte("fake-jpeg-bytes"))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	a := newApp(cfg)
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/widget", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="https://jellyfin.example.com/web/#/video?id=abc123&amp;serverId=srv1"`) {
+		t.Errorf("body missing play href with server id: %s", body)
+	}
+}
+
+func TestWidgetHandler_IncludesDownloadingCards(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	a := newApp(cfg)
+	a.poller.poll(context.Background())
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/widget", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Downloading Movie") {
+		t.Errorf("body missing downloading card: %s", body)
+	}
+	if !strings.Contains(body, `src="/image/radarr/1"`) {
+		t.Errorf("body missing radarr poster src: %s", body)
+	}
+}
+
+func TestLiveHandler_ServesPollerSnapshot(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	a := newApp(cfg)
+	a.poller.poll(context.Background())
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/live.json", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", rec.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(rec.Body.String(), `"radarr-1"`) {
+		t.Errorf("body missing radarr-1 item: %s", rec.Body.String())
+	}
+}
+
+func TestLiveHandler_ReachableAtPublicURLPrefix(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	cfg.PublicURL = "/jellyfin-widget"
+	a := newApp(cfg)
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/jellyfin-widget/live.json", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestImageHandler_RoutesRadarrAndSonarrByPrefix(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	a := newApp(cfg)
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/image/radarr/1", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if rec.Body.String() != "fake-radarr-poster" {
+		t.Errorf("body = %q, want fake-radarr-poster", rec.Body.String())
+	}
+}
+
+func TestImageHandler_UnknownSourceReturns404(t *testing.T) {
+	jf := fakeJellyfinServer(t)
+	defer jf.Close()
+
+	cfg := testConfigWithServarr(t, jf.URL)
+	a := newApp(cfg)
+	mux := newMux(cfg, a)
+
+	req := httptest.NewRequest(http.MethodGet, "/image/unknown/1", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
