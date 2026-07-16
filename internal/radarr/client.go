@@ -25,10 +25,12 @@ func New(baseURL, apiKey string) *Client {
 }
 
 type QueueItem struct {
-	MovieID  int
-	Title    string
-	Size     int64
-	SizeLeft int64
+	MovieID       int
+	Title         string
+	Size          int64
+	SizeLeft      int64
+	TrackedStatus string // raw trackedDownloadStatus: "ok" | "warning" | "error"
+	TrackedState  string // raw trackedDownloadState: "downloading" | "importPending" | "importing" | ...
 }
 
 func (c *Client) FetchQueue(ctx context.Context) ([]QueueItem, error) {
@@ -52,10 +54,12 @@ func (c *Client) FetchQueue(ctx context.Context) ([]QueueItem, error) {
 
 	var raw struct {
 		Records []struct {
-			MovieID  int   `json:"movieId"`
-			Size     int64 `json:"size"`
-			SizeLeft int64 `json:"sizeleft"`
-			Movie    struct {
+			MovieID               int    `json:"movieId"`
+			Size                  int64  `json:"size"`
+			SizeLeft              int64  `json:"sizeleft"`
+			TrackedDownloadStatus string `json:"trackedDownloadStatus"`
+			TrackedDownloadState  string `json:"trackedDownloadState"`
+			Movie                 struct {
 				Title string `json:"title"`
 			} `json:"movie"`
 		} `json:"records"`
@@ -66,7 +70,14 @@ func (c *Client) FetchQueue(ctx context.Context) ([]QueueItem, error) {
 
 	items := make([]QueueItem, len(raw.Records))
 	for i, r := range raw.Records {
-		items[i] = QueueItem{MovieID: r.MovieID, Title: r.Movie.Title, Size: r.Size, SizeLeft: r.SizeLeft}
+		items[i] = QueueItem{
+			MovieID:       r.MovieID,
+			Title:         r.Movie.Title,
+			Size:          r.Size,
+			SizeLeft:      r.SizeLeft,
+			TrackedStatus: r.TrackedDownloadStatus,
+			TrackedState:  r.TrackedDownloadState,
+		}
 	}
 	return items, nil
 }

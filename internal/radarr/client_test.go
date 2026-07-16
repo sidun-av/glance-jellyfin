@@ -143,3 +143,46 @@ func TestFetchPoster_NonOKStatusReturnsStatusCodeNotError(t *testing.T) {
 		t.Errorf("StatusCode = %d, want 404", result.StatusCode)
 	}
 }
+
+func TestFetchQueue_ParsesTrackedDownloadFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"records":[
+			{"movieId":1,"size":1000,"sizeleft":500,"trackedDownloadStatus":"warning","trackedDownloadState":"downloading","movie":{"title":"Stalled Movie"}}
+		]}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key")
+	items, err := client.FetchQueue(context.Background())
+	if err != nil {
+		t.Fatalf("FetchQueue: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].TrackedStatus != "warning" {
+		t.Errorf("TrackedStatus = %q, want warning", items[0].TrackedStatus)
+	}
+	if items[0].TrackedState != "downloading" {
+		t.Errorf("TrackedState = %q, want downloading", items[0].TrackedState)
+	}
+}
+
+func TestFetchQueue_MissingTrackedFieldsDefaultToEmptyNotError(t *testing.T) {
+	// A record with no trackedDownloadStatus/trackedDownloadState at all
+	// (e.g. an older Radarr version's shape) must still parse cleanly —
+	// Go's JSON decoder leaves missing string fields as "", not an error.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"records":[{"movieId":1,"size":1000,"sizeleft":500,"movie":{"title":"M"}}]}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key")
+	items, err := client.FetchQueue(context.Background())
+	if err != nil {
+		t.Fatalf("FetchQueue: %v", err)
+	}
+	if items[0].TrackedStatus != "" || items[0].TrackedState != "" {
+		t.Errorf("items[0] = %+v, want empty TrackedStatus/TrackedState", items[0])
+	}
+}

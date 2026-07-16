@@ -137,3 +137,43 @@ func TestFetchPoster_NonOKStatusReturnsStatusCodeNotError(t *testing.T) {
 		t.Errorf("StatusCode = %d, want 404", result.StatusCode)
 	}
 }
+
+func TestFetchQueue_ParsesTrackedDownloadFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"records":[
+			{"seriesId":5,"size":1000,"sizeleft":500,"trackedDownloadStatus":"error","trackedDownloadState":"failedPending","series":{"title":"Failed Show"}}
+		]}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key")
+	items, err := client.FetchQueue(context.Background())
+	if err != nil {
+		t.Fatalf("FetchQueue: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("len(items) = %d, want 1", len(items))
+	}
+	if items[0].TrackedStatus != "error" {
+		t.Errorf("TrackedStatus = %q, want error", items[0].TrackedStatus)
+	}
+	if items[0].TrackedState != "failedPending" {
+		t.Errorf("TrackedState = %q, want failedPending", items[0].TrackedState)
+	}
+}
+
+func TestFetchQueue_MissingTrackedFieldsDefaultToEmptyNotError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"records":[{"seriesId":5,"size":1000,"sizeleft":500,"series":{"title":"S"}}]}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key")
+	items, err := client.FetchQueue(context.Background())
+	if err != nil {
+		t.Fatalf("FetchQueue: %v", err)
+	}
+	if items[0].TrackedStatus != "" || items[0].TrackedState != "" {
+		t.Errorf("items[0] = %+v, want empty TrackedStatus/TrackedState", items[0])
+	}
+}
