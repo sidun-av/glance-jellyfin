@@ -29,7 +29,7 @@ func styleBlock() string {
 	.jf-title{font-size:11px;color:var(--color-text-highlight);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 	.jf-empty{color:var(--color-text-subdue);font-size:.85em;padding:8px 0}
 	.jf-unavailable{color:var(--color-text-subdue);padding:12px 0}
-	.jf-play-btn{position:absolute;top:6px;right:6px;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:11px;line-height:1}
+	.jf-play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding-left:3px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:18px;line-height:1}
 	.jf-play-btn:hover{background:rgba(0,0,0,.8)}
 	.jf-section-label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-subdue);margin:14px 0 6px}
 </style>`

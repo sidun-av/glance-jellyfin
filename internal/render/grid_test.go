@@ -90,6 +90,18 @@ func TestRenderWidget_CardHasDistinctPlayLink(t *testing.T) {
 	}
 }
 
+func TestRenderWidget_PlayButtonIsCenteredAndLarger(t *testing.T) {
+	html := RenderWidget(WidgetData{Cards: []CardView{
+		{Title: "X", ImageSrc: "/image/jellyfin/x", Href: "/x", PlayHref: "/play/x"},
+	}})
+	if !contains(html, "top:50%;left:50%;transform:translate(-50%,-50%)") {
+		t.Errorf("play button CSS is not centered on the card: %q", html)
+	}
+	if !contains(html, "width:44px;height:44px") {
+		t.Errorf("play button CSS is still the old small size: %q", html)
+	}
+}
+
 func TestRenderWidget_DownloadingSectionOmittedWhenEmpty(t *testing.T) {
 	html := RenderWidget(WidgetData{Cards: nil, Downloading: nil})
 	if contains(html, "jf-dl-card") {
@@ -119,6 +131,9 @@ func TestRenderWidget_RendersDownloadingCards(t *testing.T) {
 	}
 	if !contains(html, "Searching") {
 		t.Errorf("html missing 'Searching' label: %q", html)
+	}
+	if !contains(html, `[data-status="searching"] .jf-dl-pct{color:var(--color-text-highlight)}`) {
+		t.Errorf("'Searching…' text isn't styled with a readable (non-subdued) color: %q", html)
 	}
 }
 

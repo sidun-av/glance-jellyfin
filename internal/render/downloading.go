@@ -24,6 +24,7 @@ func renderDownloadingSection(items []DownloadCardView) string {
 	.jf-dl-status[data-status="searching"] .jf-dl-bar{display:none}
 	.jf-dl-fill{height:100%;background:var(--color-primary)}
 	.jf-dl-pct{font-size:10px;color:var(--color-text-subdue);margin-top:2px}
+	.jf-dl-status[data-status="searching"] .jf-dl-pct{color:var(--color-text-highlight)}
 </style>`)
 	b.WriteString(`<div class="jf-section-label">Downloading</div><div class="jf-grid">`)
 	for _, item := range items {
