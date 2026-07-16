@@ -149,3 +149,77 @@ func TestRenderWidget_IncludesLiveBootstrapAttributes(t *testing.T) {
 		t.Errorf("html missing onerror bootstrap trick: %q", html)
 	}
 }
+
+func TestRenderWidget_RendersImportingStalledFailedStatuses(t *testing.T) {
+	html := RenderWidget(WidgetData{Downloading: []DownloadCardView{
+		{ItemID: "radarr-1", Title: "Importing Movie", Poster: "/p/1", Status: "importing"},
+		{ItemID: "radarr-2", Title: "Stalled Movie", Poster: "/p/2", Status: "stalled"},
+		{ItemID: "radarr-3", Title: "Failed Movie", Poster: "/p/3", Status: "failed"},
+	}})
+	if !contains(html, `data-status="importing"`) || !contains(html, "Importing") {
+		t.Errorf("html missing importing card markup: %q", html)
+	}
+	if !contains(html, `data-status="stalled"`) || !contains(html, "Stalled") {
+		t.Errorf("html missing stalled card markup: %q", html)
+	}
+	if !contains(html, `data-status="failed"`) || !contains(html, "Failed") {
+		t.Errorf("html missing failed card markup: %q", html)
+	}
+}
+
+func TestRenderWidget_ProgressBarOnlyShownForDownloading(t *testing.T) {
+	html := RenderWidget(WidgetData{Downloading: []DownloadCardView{
+		{ItemID: "radarr-1", Title: "M", Poster: "/p/1", Status: "downloading", Percent: 55},
+	}})
+	if !contains(html, `.jf-dl-status:not([data-status="downloading"]) .jf-dl-bar{display:none}`) {
+		t.Errorf("CSS doesn't hide the bar for every non-downloading status: %q", html)
+	}
+}
+
+func TestRenderWidget_StalledAndFailedHaveDistinctColors(t *testing.T) {
+	html := RenderWidget(WidgetData{Downloading: []DownloadCardView{
+		{ItemID: "radarr-1", Title: "M", Poster: "/p/1", Status: "stalled"},
+	}})
+	if !contains(html, `[data-status="stalled"] .jf-dl-pct{color:var(--color-warning,#e0a458)}`) {
+		t.Errorf("stalled status isn't styled with the warning color: %q", html)
+	}
+	if !contains(html, `[data-status="failed"] .jf-dl-pct{color:var(--color-negative,#e05f5f)}`) {
+		t.Errorf("failed status isn't styled with the negative color: %q", html)
+	}
+}
+
+func TestRenderWidget_AnimatedDotsOnlyForSearchingAndImporting(t *testing.T) {
+	html := RenderWidget(WidgetData{Downloading: []DownloadCardView{
+		{ItemID: "radarr-1", Title: "M", Poster: "/p/1", Status: "searching"},
+	}})
+	if !contains(html, `class="jf-dl-dots"`) {
+		t.Errorf("html missing the animated-dots span: %q", html)
+	}
+	if !contains(html, `[data-status="searching"] .jf-dl-dots{display:inline-block;animation:jf-dl-dots`) {
+		t.Errorf("dots aren't animated for searching: %q", html)
+	}
+	if !contains(html, `[data-status="importing"] .jf-dl-dots{display:inline-block;animation:jf-dl-dots`) {
+		t.Errorf("dots aren't animated for importing: %q", html)
+	}
+	if !contains(html, `@keyframes jf-dl-dots`) {
+		t.Errorf("html missing the dots keyframes: %q", html)
+	}
+}
+
+func TestRenderWidget_BootstrapScriptKnowsAllStatusLabels(t *testing.T) {
+	html := RenderWidget(WidgetData{LiveURL: "/live.json", PollIntervalMS: 12000})
+	// RenderWidget embeds bootstrapScript inside an onerror="..." attribute via
+	// html.EscapeString, which turns every ' into &#39; (required so the
+	// script's own embedded " characters, e.g. inside the CSS.escape
+	// selector, don't break out of the attribute). So the rendered output
+	// contains the HTML-entity-escaped form of the labels object, not the
+	// raw JS source.
+	for _, want := range []string{"searching:&#39;Searching&#39;", "importing:&#39;Importing&#39;", "stalled:&#39;Stalled&#39;", "failed:&#39;Failed&#39;"} {
+		if !contains(html, want) {
+			t.Errorf("bootstrap script missing label mapping %q: %q", want, html)
+		}
+	}
+	if contains(html, "Searching…") {
+		t.Errorf("bootstrap script still has the old hardcoded ellipsis fallback: %q", html)
+	}
+}
