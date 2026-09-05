@@ -31,7 +31,6 @@ func styleBlock() string {
 	.jf-unavailable{color:var(--color-text-subdue);padding:12px 0}
 	.jf-play-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding-left:3px;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:18px;line-height:1}
 	.jf-play-btn:hover{background:rgba(0,0,0,.8)}
-	.jf-section-label{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-subdue);margin:14px 0 6px}
 </style>`
 }
 
@@ -55,10 +54,19 @@ func RenderWidget(data WidgetData) string {
 </style>`)
 	}
 
+	if len(data.Downloading) > 0 {
+		b.WriteString(downloadingStyleBlock())
+	}
+
 	fmt.Fprintf(&b, `<div class="jf-widget" data-live-url="%s" data-poll-ms="%d">`,
 		html.EscapeString(data.LiveURL), data.PollIntervalMS)
 
-	if len(data.Cards) == 0 && data.SeerrURL == "" {
+	// Library cards, the Seerr search card, and in-progress downloads all
+	// share one grid/row — already-downloaded items lead, items still being
+	// searched for or fetched trail at the end (sortDownloadCards further
+	// orders those by how much attention they need) — rather than splitting
+	// into visually separate Library/Downloading sections.
+	if len(data.Cards) == 0 && len(data.Downloading) == 0 && data.SeerrURL == "" {
 		b.WriteString(`<style>.jf-empty{color:var(--color-text-subdue);font-size:.85em;padding:8px 0}</style><div class="jf-empty">no recently added items found</div>`)
 	} else {
 		b.WriteString(`<div class="jf-grid">`)
@@ -68,11 +76,10 @@ func RenderWidget(data WidgetData) string {
 		if data.SeerrURL != "" {
 			b.WriteString(renderSeerrCard(data.SeerrURL))
 		}
+		for _, d := range data.Downloading {
+			b.WriteString(renderDownloadCard(d))
+		}
 		b.WriteString(`</div>`)
-	}
-
-	if len(data.Downloading) > 0 {
-		b.WriteString(renderDownloadingSection(data.Downloading))
 	}
 
 	// Only include bootstrap script if there's a live URL to poll

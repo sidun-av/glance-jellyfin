@@ -283,3 +283,41 @@ func TestRenderWidget_SeerrCardEscapesURL(t *testing.T) {
 		t.Errorf("seerr URL not escaped: %q", html)
 	}
 }
+
+func TestRenderWidget_LibraryAndDownloadingShareOneGrid(t *testing.T) {
+	html := RenderWidget(WidgetData{
+		Cards:       []CardView{{Title: "Downloaded Movie", ImageSrc: "/image/jellyfin/1", Href: "/1"}},
+		Downloading: []DownloadCardView{{ItemID: "radarr-1", Title: "Downloading Movie", Poster: "/p/1", Status: "downloading", Percent: 10}},
+	})
+	if got := count(html, `class="jf-grid"`); got != 1 {
+		t.Errorf("jf-grid count = %d, want 1 (library and downloading no longer separate rows): %q", got, html)
+	}
+	if contains(html, "jf-section-label") || contains(html, ">Downloading<") {
+		t.Errorf("html still has a separate Downloading section label: %q", html)
+	}
+}
+
+func TestRenderWidget_DownloadedCardsComeBeforeDownloadingCards(t *testing.T) {
+	html := RenderWidget(WidgetData{
+		Cards:       []CardView{{Title: "Downloaded Movie", ImageSrc: "/image/jellyfin/1", Href: "/1"}},
+		Downloading: []DownloadCardView{{ItemID: "radarr-1", Title: "Downloading Movie", Poster: "/p/1", Status: "searching"}},
+	})
+	libraryCard := strings.Index(html, `class="jf-card"`)
+	downloadCard := strings.Index(html, `class="jf-dl-card"`)
+	if libraryCard == -1 || downloadCard == -1 {
+		t.Fatalf("expected both a library and a downloading card: %q", html)
+	}
+	if downloadCard < libraryCard {
+		t.Errorf("downloading card appears before the downloaded library card: %q", html)
+	}
+}
+
+func TestRenderWidget_NoEmptyMessageWhenOnlyDownloadingHasItems(t *testing.T) {
+	html := RenderWidget(WidgetData{
+		Cards:       nil,
+		Downloading: []DownloadCardView{{ItemID: "radarr-1", Title: "Downloading Movie", Poster: "/p/1", Status: "searching"}},
+	})
+	if contains(html, "jf-empty") {
+		t.Errorf("html shows the empty-library message even though a downloading card should render: %q", html)
+	}
+}

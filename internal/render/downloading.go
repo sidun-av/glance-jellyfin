@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"strings"
 )
 
 // DownloadCardView.Status is one of "searching", "downloading",
@@ -17,9 +16,8 @@ type DownloadCardView struct {
 	Percent int
 }
 
-func renderDownloadingSection(items []DownloadCardView) string {
-	var b strings.Builder
-	b.WriteString(`<style>
+func downloadingStyleBlock() string {
+	return `<style>
 	[data-item-id]{display:block}
 	.jf-dl-status{margin-top:4px}
 	.jf-dl-bar{height:4px;border-radius:2px;background:var(--color-widget-background-highlight);overflow:hidden}
@@ -34,22 +32,24 @@ func renderDownloadingSection(items []DownloadCardView) string {
 	.jf-dl-status[data-status="searching"] .jf-dl-dots{display:inline-block;animation:jf-dl-dots 1.4s steps(4) infinite}
 	.jf-dl-status[data-status="importing"] .jf-dl-dots{display:inline-block;animation:jf-dl-dots 1.4s steps(4) infinite}
 	@keyframes jf-dl-dots{to{width:1.6em}}
-</style>`)
-	b.WriteString(`<div class="jf-section-label">Downloading</div><div class="jf-grid">`)
-	for _, item := range items {
-		label := statusLabel(item)
-		width := 0
-		if item.Status == "downloading" {
-			width = item.Percent
-		}
-		fmt.Fprintf(&b,
-			`<div class="jf-dl-card" data-item-id="%s"><img class="jf-poster" src="%s" alt="%s" loading="lazy"><div class="jf-title">%s</div><div class="jf-dl-status" data-status="%s"><div class="jf-dl-bar"><div class="jf-dl-fill" style="width:%d%%"></div></div><div class="jf-dl-pct"><span class="jf-dl-label">%s</span><span class="jf-dl-dots">....</span></div></div></div>`,
-			html.EscapeString(item.ItemID), html.EscapeString(item.Poster), html.EscapeString(item.Title),
-			html.EscapeString(item.Title), html.EscapeString(item.Status), width, html.EscapeString(label),
-		)
+</style>`
+}
+
+// renderDownloadCard renders one download-in-progress card. It shares the
+// same .jf-grid as the library cards (see RenderWidget) rather than owning
+// its own section/grid, so downloading items appear in the same row as
+// already-downloaded ones instead of a visually separate block.
+func renderDownloadCard(item DownloadCardView) string {
+	label := statusLabel(item)
+	width := 0
+	if item.Status == "downloading" {
+		width = item.Percent
 	}
-	b.WriteString(`</div>`)
-	return b.String()
+	return fmt.Sprintf(
+		`<div class="jf-dl-card" data-item-id="%s"><img class="jf-poster" src="%s" alt="%s" loading="lazy"><div class="jf-title">%s</div><div class="jf-dl-status" data-status="%s"><div class="jf-dl-bar"><div class="jf-dl-fill" style="width:%d%%"></div></div><div class="jf-dl-pct"><span class="jf-dl-label">%s</span><span class="jf-dl-dots">....</span></div></div></div>`,
+		html.EscapeString(item.ItemID), html.EscapeString(item.Poster), html.EscapeString(item.Title),
+		html.EscapeString(item.Title), html.EscapeString(item.Status), width, html.EscapeString(label),
+	)
 }
 
 // statusLabel returns the short text shown for a card's current status:
